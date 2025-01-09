@@ -2,6 +2,8 @@ import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, PluginS
 import { startServer, refreshServer, stopServer } from './server';
 import { handlePasteEvent } from './urlHandler';
 import { onElement } from './onElement';
+import { exec, spawn } from 'child_process';
+import * as path from 'path';
 
 interface MyPluginSettings {
 	mySetting: string;
@@ -159,24 +161,22 @@ export default class MyPlugin extends Plugin {
 		event.preventDefault();
 		this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.blur();
 		img.classList.remove('image-ready-click-view', 'image-ready-resize');
-		// 创建一个新的菜单实例
-		const menu = new Menu();
-		// 检查当前视图是否为预览模式
-		const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
-		// 如果在预览模式下，添加预览模式的菜单项
-		if (inPreview) {
-			this.addEagleImageMenuPreviewMode(menu, img);
+
+		// 确保 event 是 MouseEvent 类型
+		if (event instanceof MouseEvent) {
+			const menu = new Menu();
+			const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
+			if (inPreview) {
+				this.addEagleImageMenuPreviewMode(menu, img, event); // 确保传递了 event 参数
+			} else {
+				this.addEagleImageMenuSourceMode(menu, img, inTable, inCallout, event);
+			}
+			// 注册Esc键以关闭菜单
+			this.registerEscapeButton(menu);
+			let offset = 0;
+			if (!inPreview && (inTable || inCallout)) offset = -138;
+			menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
 		}
-		// 否则，添加源模式的菜单项
-		else {
-			this.addEagleImageMenuSourceMode(menu, img, inTable, inCallout);
-		}
-		// 注册Esc键以关闭菜单
-		this.registerEscapeButton(menu);
-		let offset = 0;
-		if (!inPreview && (inTable || inCallout)) offset = -138;
-		menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
-		//this.app.workspace.trigger("AttachFlow:contextmenu", menu);
 	}
 	registerEscapeButton(menu: Menu, document: Document = activeDocument) {
 		menu.register(
@@ -194,179 +194,149 @@ export default class MyPlugin extends Plugin {
 			)
 		);
 	}
-	addEagleImageMenuPreviewMode = (menu: Menu, img: HTMLImageElement) => {
-		menu.addItem((item: MenuItem) =>
-			item
-				.setIcon("link")
-				.setTitle("To Eagle")
-				.onClick(async () => {
-					try {
-						const match = img.src.match(/\/images\/(.*)\.info/);
-						if (match && match[1]) {
-							const eagleLink = `eagle://item/${match[1]}`;
-							navigator.clipboard.writeText(eagleLink);
-							window.open(eagleLink, '_self'); // 直接运行跳转到 eagle:// 链接
-						} else {
-							throw new Error('Invalid image source format');
-						}
-					}
-					catch (error) {
-						new Notice('Failed to Eagle');
-					}
-				})
-		);
-		menu.addItem(async (item: MenuItem) => {
+	// 获取图片信息
+	async fetchImageInfo(img: HTMLImageElement): Promise<{ id: string, name: string, ext: string, annotation: string, tags: string, url: string } | null> {
+		const match = img.src.match(/\/images\/(.*)\.info/);
+		if (match && match[1]) {
+			const requestOptions: RequestInit = {
+				method: 'GET',
+				redirect: 'follow' as RequestRedirect
+			};
+
 			try {
-				const response = await fetch(`${img.src}/name`);
-				if (!response.ok) {
-					throw new Error('Network response was not ok');
+				const response = await fetch(`http://localhost:41595/api/item/info?id=${match[1]}`, requestOptions);
+				const result = await response.json();
+
+				if (result.status === "success" && result.data) {
+					return result.data;
+				} else {
+					console.log('Failed to fetch item info');
 				}
-				const imageName = await response.text();
-				item.setIcon("link")
-					.setTitle(`Eagle Name: ${imageName}`)
-					.onClick(() => {
-						navigator.clipboard.writeText(imageName);
-						new Notice(`Copied: ${imageName}`);
-					});
 			} catch (error) {
-				item.setIcon("link").setTitle("Failed to fetch image name");
+				console.log('Error fetching item info', error);
 			}
-		});
-		menu.addItem(async (item: MenuItem) => {
-			try {
-				const response = await fetch(`${img.src}/annotation`);
-				if (!response.ok) {
-					throw new Error('Network response was not ok');
-				}
-				const annotation = await response.text();
-				item.setIcon("link")
+		} else {
+			console.log('Invalid image source format');
+		}
+		return null;
+	}
+	
+	async addEagleImageMenuPreviewMode(menu: Menu, img: HTMLImageElement, event: MouseEvent) {
+		const imageInfo = await this.fetchImageInfo(img);
+
+		if (imageInfo) {
+			const { id, name, ext, annotation, tags, url } = imageInfo;
+			// const infoToCopy = `ID: ${id}, Name: ${name}, Ext: ${ext}, Annotation: ${annotation}, Tags: ${tags}, URL: ${url}`;
+			// navigator.clipboard.writeText(infoToCopy);
+			// new Notice(`Copied: ${infoToCopy}`);
+
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("external-link")
+					.setTitle("Open in eagle")
+					.onClick(() => {
+						const eagleLink = `eagle://item/${id}`;
+						navigator.clipboard.writeText(eagleLink);
+						window.open(eagleLink, '_self'); // 直接运行跳转到 eagle:// 链接
+					})
+			);
+
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("external-link")
+					.setTitle("Open in windows")
+					.onClick(() => {
+						const libraryPath = this.settings.libraryPath;
+						const localFilePath = path.join(
+							libraryPath,
+							"images",
+							`${id}.info`,
+							`${name}.${ext}`
+						);
+			
+						// 打印路径用于调试
+						new Notice(`文件的真实路径是: ${localFilePath}`);
+						console.log(`文件的真实路径是: ${localFilePath}`);
+			
+						// 使用 spawn 调用 explorer.exe 打开文件
+						const child = spawn('explorer.exe', [localFilePath], { shell: true });
+
+						child.on('error', (error) => {
+							console.error('Error opening file:', error);
+							new Notice('无法打开文件，请检查路径是否正确');
+						});
+
+						child.on('exit', (code) => {
+							if (code === 0) {
+								console.log('文件已成功打开');
+							} else {
+								console.error('文件未能正常打开，exit code:', code);
+							}
+						});
+					})
+			);
+			
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("link")
+					.setTitle(`Eagle Name: ${name}`)
+					.onClick(() => {
+						navigator.clipboard.writeText(name);
+						new Notice(`Copied: ${name}`);
+					})
+			);
+
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("link")
 					.setTitle(`Eagle Annotation: ${annotation}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(annotation);
 						new Notice(`Copied: ${annotation}`);
-					});
-			} catch (error) {
-				item.setIcon("link").setTitle("Failed to fetch image annotation");
-			}
-		});
-		menu.addItem(async (item: MenuItem) => {
-			try {
-				const response = await fetch(`${img.src}/tags`);
-				if (!response.ok) {
-					throw new Error('Network response was not ok');
-				}
-				const tags = await response.text();
-				item.setIcon("link")
-					.setTitle(`Eagle tags: ${tags}`)
-					.onClick(() => {
-						navigator.clipboard.writeText(tags);
-						new Notice(`Copied: ${tags}`);
-					});
-			} catch (error) {
-				item.setIcon("link").setTitle("Failed to fetch image tags");
-			}
-		});
-		menu.addItem(async (item: MenuItem) => {
-			try {
-				const response = await fetch(`${img.src}/url`);
-				if (!response.ok) {
-					throw new Error('Network response was not ok');
-				}
-				const url = await response.text();
-				item.setIcon("link")
-					.setTitle(`Eagle URL: ${url}`)
+					})
+			);
+
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("link")
+					.setTitle(`Eagle url: ${url}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(url);
 						new Notice(`Copied: ${url}`);
-						window.open(url, '_self');
-					});
-			} catch (error) {
-				item.setIcon("link").setTitle("Failed to fetch image url");
-			}
-		});
+					})
+			);
 
-		menu.addItem((item: MenuItem) =>
-			item
-				.setIcon("external-link")
-				.setTitle("Open in windows")
-				.onClick(async () => {
-					const match = img.src.match(/\/images\/(.*)\.info/);
-					if (match && match[1]) {
-						const requestOptions: RequestInit = {
-							method: 'GET',
-							redirect: 'follow' as RequestRedirect
-						};
 
-						try {
-							const response = await fetch(`http://localhost:41595/api/item/info?id=${match[1]}`, requestOptions);
-							const result = await response.json();
 
-							if (result.status === "success" && result.data) {
-								const { id, name, ext } = result.data;
-								const infoToCopy = `ID: ${id}, Name: ${name}, Ext: ${ext}`;
-								navigator.clipboard.writeText(infoToCopy);
-								new Notice(`Copied: ${infoToCopy}`);
-							} else {
-								console.log('Failed to fetch item info');
-							}
-						} catch (error) {
-							console.log('Error fetching item info', error);
-						}
-					} else {
-						console.log('Invalid image source format');
-					}
-				})
-		);
+			// 其他菜单项可以继续使用 { id, name, ext } 数据
+		}
 
-		// menu.addItem((item: MenuItem) =>
-		// 	item
-		// 		.setIcon("name")
-		// 		.setTitle("Eagle Name")
-		// 		.onClick(async () => {
-		// 			try {
-		// 				const response = await fetch(`${img.src}/name`);
-		// 				if (!response.ok) {
-		// 					throw new Error('Network response was not ok');
-		// 				}
-		// 				const imageName = await response.text();
-		// 				new Notice(`Image Name: ${imageName}`);
-		// 			} catch (error) {
-		// 				new Notice('Failed to fetch image name');
-		// 			}
-		// 		})
-		// );
-		// menu.addItem((item: MenuItem) =>
-		// 	item
-		// 		.setIcon("name")
-		// 		.setTitle("Eagle Name2[cs,Gh]")
-		// );
-		// menu.addItem((item: MenuItem) =>
-		// 	item
-		// 		.setIcon("external-link")
-		// 		.setTitle("Open in external browser")
-		// 		.onClick(async () => {
-		// 			window.open(img.src, '_blank');
-		// 		})
-		// );
+		// 确保菜单在异步操作后显示
+		menu.showAtPosition({ x: event.pageX, y: event.pageY });
 	}
 
-	addEagleImageMenuSourceMode = (menu: Menu, img: HTMLImageElement, inTable: boolean, inCallout: boolean) => {
-		this.addEagleImageMenuPreviewMode(menu, img);
+	async addEagleImageMenuSourceMode(menu: Menu, img: HTMLImageElement, inTable: boolean, inCallout: boolean, event: MouseEvent) {
+		await this.addEagleImageMenuPreviewMode(menu, img, event);
+
+		// // 调试输出，确认函数被调用
+		// console.log("addEagleImageMenuSourceMode called");
+
+		// // 调试输出，确认菜单项添加
+		// console.log("Adding 'Clear image link' menu item");
+
 		menu.addItem((item: MenuItem) =>
 			item
 				.setIcon("trash-2")
 				.setTitle("Clear image link")
-				// .onClick(() => {
-				// 	// const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-				// 	// //  @ts-expect-error, not typed
-				// 	// const editorView = editor.cm as EditorView;
-				// 	// const target_pos = editorView.posAtDOM(img);
-				// 	// deleteCurTargetLink(img.src, this, 'img', target_pos, inTable, inCallout);
-				// })
 				.onClick(async () => {
 					navigator.clipboard.writeText(img.src);
+					new Notice(`Copied: ${img.src}`);
 				})
 		);
+
+		// 确保菜单在异步操作后显示
+		menu.showAtPosition({ x: event.pageX, y: event.pageY });
+		// console.log("Menu shown at position", { x: event.pageX, y: event.pageY });
 	}
 
 
