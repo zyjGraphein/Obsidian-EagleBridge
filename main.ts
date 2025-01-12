@@ -1,6 +1,6 @@
 import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { startServer, refreshServer, stopServer } from './server';
-import { handlePasteEvent } from './urlHandler';
+import { handlePasteEvent, handleDropEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn } from 'child_process';
 import * as path from 'path';
@@ -9,12 +9,14 @@ interface MyPluginSettings {
 	mySetting: string;
 	port: number;
 	libraryPath: string;
+	folderId?: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default',
 	port: 6060,
-	libraryPath: ''
+	libraryPath: '',
+	folderId: '',
 }
 
 export default class MyPlugin extends Plugin {
@@ -37,23 +39,84 @@ export default class MyPlugin extends Plugin {
 
 		// 添加设置面板
 		this.addSettingTab(new SampleSettingTab(this.app, this));
-		await this.loadSettings();
+		// await this.loadSettings();
 		// 注册粘贴事件
 		this.registerEvent(
 			this.app.workspace.on('editor-paste', (clipboard: ClipboardEvent, editor: Editor) => {
-				handlePasteEvent(clipboard, editor, this.settings.port);
+				handlePasteEvent(clipboard, editor, this.settings.port, this);
 			})
 		);
 
-		this.registerDomEvent(document, "click", (event: MouseEvent) => {
+		// 注册拖拽事件
+		this.registerEvent(
+			this.app.workspace.on('editor-drop', (event: DragEvent, editor: Editor) => {
+				handleDropEvent(event, editor, this.settings.port, this);
+			})
+		);
+
+		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
 			const target = event.target as HTMLElement;
-			if (target.matches("span.external-link, a.external-link")) {
+
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!activeView) {
+				console.log('未找到活动视图');
+				return;
+			}
+
+			const inPreview = activeView.getMode() === "preview";
+
+			let url: string | null = null;
+
+			if (inPreview) {
+				// 预览模式下的处理逻辑
+				if (!target.matches("a.external-link")) {
+					return; // 如果不是点击 a.external-link，直接返回
+				}
+
+				const linkElement = target as HTMLAnchorElement;
+				if (linkElement && linkElement.href) {
+					url = linkElement.href;
+					console.log('预览模式下的链接:', url);
+				}
+			} else {
+				// 编辑模式下的处理逻辑
+				if (!target.matches("span.external-link, .cm-link, a.cm-underline")) {
+					return; // 如果不是点击 span.external-link, .cm-link 或 a.cm-underline，直接返回
+				}
+
+				const editor = activeView.editor;
+				const cursor = editor.getCursor();
+				const lineText = editor.getLine(cursor.line);
+
+				// 使用正则表达式提取 URL
+				const urlMatch = lineText.match(/\bhttps?:\/\/[^\s)]+/g);
+				if (urlMatch) {
+					url = urlMatch[0];
+					console.log('编辑模式下的链接:', url);
+				}
+			}
+
+			// 检查链接格式
+			if (url && url.match(/^http:\/\/localhost:\d+\/images\/[^.]+\.info$/)) {
 				event.preventDefault();
 				event.stopPropagation();
-				console.log('阻止默认的链接跳转行为');
-				this.handleLinkClick(event);
+				console.log('阻止了链接:', url);
+				this.handleLinkClick(event, url);
+			} else {
+				return; // 如果链接不符合条件，直接返回
 			}
 		}, { capture: true });
+
+		// 添加自定义样式
+		const style = document.createElement('style');
+		style.textContent = `
+			.menu-item {
+				max-width: 300px; /* 设置最大宽度 */
+				white-space: normal; /* 允许换行 */
+				word-wrap: break-word; /* 自动换行 */
+			}
+		`;
+		document.head.appendChild(style);
 	}
 
 	onunload() {
@@ -91,42 +154,81 @@ export default class MyPlugin extends Plugin {
 	// 		)
 	// 	);
 	// }
+
 	// 处理链接点击事件
-	handleLinkClick(event: MouseEvent) {
-		// event.preventDefault(); // 阻止默认的跳转行为
-		// event.stopPropagation(); // 阻止事件冒泡
-		// 创建一个新的菜单实例
-		const menu = new Menu();
-
-		// 添加菜单项
-		menu.addItem((item: MenuItem) =>
-			item
-				.setIcon("link")
-				.setTitle("Open Link")
-				.onClick(() => {
-					const link = event.target as HTMLAnchorElement;
-					if (link && link.href) {
-						window.open(link.href, '_blank'); // 在新窗口中打开链接
-					}
-				})
-		);
-
-		menu.addItem((item: MenuItem) =>
-			item
-				.setIcon("clipboard")
-				.setTitle("Copy Link")
-				.onClick(() => {
-					const link = event.target as HTMLAnchorElement;
-					if (link && link.href) {
-						navigator.clipboard.writeText(link.href);
-						new Notice(`Copied: ${link.href}`);
-					}
-				})
-		);
-
-		// 显示菜单
-		menu.showAtPosition({ x: event.pageX, y: event.pageY });
+	handleLinkClick(event: MouseEvent, url: string) {
+		if (event instanceof MouseEvent) {
+			const menu = new Menu();
+			const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
+			if (inPreview) {
+				this.addEagleImageMenuPreviewMode(menu, url, event); // 确保传递了 event 参数
+			} else {
+				this.addEagleImageMenuSourceMode(menu, url, event);
+			}
+			// 注册Esc键以关闭菜单
+			this.registerEscapeButton(menu);
+			let offset = 0;
+			// if (!inPreview && (inTable || inCallout)) offset = -138;
+			menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
+		}
 	}
+	// 	const target = event.target as HTMLElement;
+	// 	if (target.matches(".cm-formatting-link-string")) {
+	// 		console.log('链接地址1:', target);
+	// 		// event.preventDefault();
+	// 		// event.stopPropagation();
+	// 		const linkElement = target.closest('.cm-line')?.querySelector('.cm-header.cm-string.cm-url');
+	// 		console.log('链接地址2:', linkElement);
+	// 		if (linkElement) {
+	// 			const link = linkElement.textContent;
+	// 			if (link) {
+	// 				console.log('链接地址:', link);
+	// 				// 你可以在这里处理链接，例如打开链接或复制到剪贴板
+	// 			}
+	// 		}
+	// 	}
+	// 	// event.preventDefault(); // 阻止默认的跳转行为
+	// 	// event.stopPropagation(); // 阻止事件冒泡
+	// 	// 创建一个新的菜单实例
+	// 	// const linkElement = target.closest('.cm-line')?.querySelector('.cm-header.cm-string.cm-url');
+    //     // if (linkElement) {
+    //     //     const link = linkElement.textContent;
+    //     //     if (link) {
+    //     //         console.log('链接地址:', link);
+    //     //         // 你可以在这里处理链接，例如打开链接或复制到剪贴板
+    //     //     }
+    //     // }
+	// 	const menu = new Menu();
+
+	// 	// 添加菜单项
+	// 	menu.addItem((item: MenuItem) =>
+	// 		item
+	// 			.setIcon("link")
+	// 			.setTitle("Open Link")
+	// 			.onClick(() => {
+	// 				const link = event.target as HTMLAnchorElement;
+	// 				if (link && link.href) {
+	// 					window.open(link.href, '_blank'); // 在新窗口中打开链接
+	// 				}
+	// 			})
+	// 	);
+
+	// 	menu.addItem((item: MenuItem) =>
+	// 		item
+	// 			.setIcon("clipboard")
+	// 			.setTitle("Copy Link")
+	// 			.onClick(() => {
+	// 				const link = event.target as HTMLAnchorElement;
+	// 				if (link && link.href) {
+	// 					navigator.clipboard.writeText(link.href);
+	// 					new Notice(`Copied: ${link.href}`);
+	// 				}
+	// 			})
+	// 	);
+
+	// 	// 显示菜单
+	// 	menu.showAtPosition({ x: event.pageX, y: event.pageY });
+	// }
 
 	// handleLinkClick(event: MouseEvent) {
 	// 	const link = event.target as HTMLAnchorElement;
@@ -161,15 +263,16 @@ export default class MyPlugin extends Plugin {
 		event.preventDefault();
 		this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.blur();
 		img.classList.remove('image-ready-click-view', 'image-ready-resize');
-
+		const url = img.src;
+		// console.log('链接:', url);	
 		// 确保 event 是 MouseEvent 类型
 		if (event instanceof MouseEvent) {
 			const menu = new Menu();
 			const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
 			if (inPreview) {
-				this.addEagleImageMenuPreviewMode(menu, img, event); // 确保传递了 event 参数
+				this.addEagleImageMenuPreviewMode(menu, url, event); // 确保传递了 event 参数
 			} else {
-				this.addEagleImageMenuSourceMode(menu, img, inTable, inCallout, event);
+				this.addEagleImageMenuSourceMode(menu, url, event);
 			}
 			// 注册Esc键以关闭菜单
 			this.registerEscapeButton(menu);
@@ -195,8 +298,8 @@ export default class MyPlugin extends Plugin {
 		);
 	}
 	// 获取图片信息
-	async fetchImageInfo(img: HTMLImageElement): Promise<{ id: string, name: string, ext: string, annotation: string, tags: string, url: string } | null> {
-		const match = img.src.match(/\/images\/(.*)\.info/);
+	async fetchImageInfo(url: string): Promise<{ id: string, name: string, ext: string, annotation: string, tags: string, url: string } | null> {
+		const match = url.match(/\/images\/(.*)\.info/);
 		if (match && match[1]) {
 			const requestOptions: RequestInit = {
 				method: 'GET',
@@ -221,8 +324,8 @@ export default class MyPlugin extends Plugin {
 		return null;
 	}
 	
-	async addEagleImageMenuPreviewMode(menu: Menu, img: HTMLImageElement, event: MouseEvent) {
-		const imageInfo = await this.fetchImageInfo(img);
+	async addEagleImageMenuPreviewMode(menu: Menu, url: string, event: MouseEvent) {
+		const imageInfo = await this.fetchImageInfo(url);
 
 		if (imageInfo) {
 			const { id, name, ext, annotation, tags, url } = imageInfo;
@@ -232,7 +335,7 @@ export default class MyPlugin extends Plugin {
 
 			menu.addItem((item: MenuItem) =>
 				item
-					.setIcon("external-link")
+					.setIcon("file-symlink")
 					.setTitle("Open in eagle")
 					.onClick(() => {
 						const eagleLink = `eagle://item/${id}`;
@@ -243,8 +346,8 @@ export default class MyPlugin extends Plugin {
 
 			menu.addItem((item: MenuItem) =>
 				item
-					.setIcon("external-link")
-					.setTitle("Open in windows")
+					.setIcon("square-arrow-out-up-right")
+					.setTitle("Open in the default app")
 					.onClick(() => {
 						const libraryPath = this.settings.libraryPath;
 						const localFilePath = path.join(
@@ -275,10 +378,43 @@ export default class MyPlugin extends Plugin {
 						});
 					})
 			);
-			
 			menu.addItem((item: MenuItem) =>
 				item
-					.setIcon("link")
+					.setIcon("external-link")
+					.setTitle("Open in other apps")
+					.onClick(() => {
+						const libraryPath = this.settings.libraryPath;
+						const localFilePath = path.join(
+							libraryPath,
+							"images",
+							`${id}.info`,
+							`${name}.${ext}`
+						);
+			
+						// 打印路径用于调试
+						new Notice(`文件的真实路径是: ${localFilePath}`);
+						console.log(`文件的真实路径是: ${localFilePath}`);
+			
+						// 使用 rundll32 调用系统的"打开方式"对话框
+						const child = spawn('rundll32', ['shell32.dll,OpenAs_RunDLL', localFilePath], { shell: true });
+
+						child.on('error', (error) => {
+							console.error('Error opening file:', error);
+							new Notice('无法打开文件，请检查路径是否正确');
+						});
+
+						child.on('exit', (code) => {
+							if (code === 0) {
+								console.log('文件已成功打开');
+							} else {
+								console.error('文件未能正常打开，exit code:', code);
+							}
+						});
+					})
+			);	
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("case-sensitive")
 					.setTitle(`Eagle Name: ${name}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(name);
@@ -288,7 +424,7 @@ export default class MyPlugin extends Plugin {
 
 			menu.addItem((item: MenuItem) =>
 				item
-					.setIcon("link")
+					.setIcon("letter-text")
 					.setTitle(`Eagle Annotation: ${annotation}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(annotation);
@@ -298,14 +434,22 @@ export default class MyPlugin extends Plugin {
 
 			menu.addItem((item: MenuItem) =>
 				item
-					.setIcon("link")
+					.setIcon("link-2")
 					.setTitle(`Eagle url: ${url}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(url);
 						new Notice(`Copied: ${url}`);
 					})
 			);
-
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("tags")
+					.setTitle(`Eagle tag: ${tags}`)
+					.onClick(() => {
+						navigator.clipboard.writeText(tags);//该复制存在问题，待修改
+						new Notice(`Copied: ${tags}`);
+					})
+			);
 
 
 			// 其他菜单项可以继续使用 { id, name, ext } 数据
@@ -315,8 +459,8 @@ export default class MyPlugin extends Plugin {
 		menu.showAtPosition({ x: event.pageX, y: event.pageY });
 	}
 
-	async addEagleImageMenuSourceMode(menu: Menu, img: HTMLImageElement, inTable: boolean, inCallout: boolean, event: MouseEvent) {
-		await this.addEagleImageMenuPreviewMode(menu, img, event);
+	async addEagleImageMenuSourceMode(menu: Menu, url: string, event: MouseEvent) {
+		await this.addEagleImageMenuPreviewMode(menu, url, event);
 
 		// // 调试输出，确认函数被调用
 		// console.log("addEagleImageMenuSourceMode called");
@@ -329,8 +473,8 @@ export default class MyPlugin extends Plugin {
 				.setIcon("trash-2")
 				.setTitle("Clear image link")
 				.onClick(async () => {
-					navigator.clipboard.writeText(img.src);
-					new Notice(`Copied: ${img.src}`);
+					navigator.clipboard.writeText(url);
+					new Notice(`Copied: ${url}`);
 				})
 		);
 
@@ -374,6 +518,17 @@ class SampleSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.libraryPath)
 				.onChange(async (value) => {
 					this.plugin.settings.libraryPath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Folder ID')
+			.setDesc('Enter the folder ID for Eagle')
+			.addText(text => text
+				.setPlaceholder('Enter folder ID')
+				.setValue(this.plugin.settings.folderId || '')
+				.onChange(async (value) => {
+					this.plugin.settings.folderId = value;
 					await this.plugin.saveSettings();
 				}));
 

@@ -26,8 +26,9 @@ export function startServer(libraryPath: string, port: number) {
     });
 
     watcher.on('addDir', (dirPath) => {
-        latestDirUrl = `http://localhost:${port}/${path.relative(libraryPath, dirPath)}`;
-        console.log(`新建文件夹路径: ${latestDirUrl}`);
+        const relativePath = path.relative(libraryPath, dirPath).replace(/\\/g, '/');
+        latestDirUrl = `http://localhost:${port}/${relativePath}`;
+        // console.log(`新建文件夹路径: ${latestDirUrl}`);
         urlEmitter.emit('urlUpdated', latestDirUrl);
     });
 
@@ -40,103 +41,103 @@ export function startServer(libraryPath: string, port: number) {
         const filePath = path.join(libraryPath, req.url || '');
         console.log('Requested file path:', filePath);
 
-        // 检查请求是否为获取名称的请求
-        if (req.url?.endsWith('/name')) {
-            const dirPath = path.dirname(filePath);
-            const jsonFilePath = path.join(dirPath, 'metadata.json');
-            fs.readFile(jsonFilePath, 'utf8', (err, data) => {
-                if (err) {
-                    console.error('Error reading JSON file:', err);
-                    res.writeHead(500, {'Content-Type': 'text/plain'});
-                    res.end('Internal Server Error');
-                } else {
-                    try {
-                        const info = JSON.parse(data);
-                        const imageName = info.name;
-                        res.writeHead(200, {'Content-Type': 'text/plain'});
-                        res.end(imageName);
-                    } catch (parseErr) {
-                        console.error('Error parsing JSON:', parseErr);
-                        res.writeHead(500, {'Content-Type': 'text/plain'});
-                        res.end('Error parsing JSON');
-                    }
-                }
-            });
-            return; // 处理完请求后返回
-        }
+        // // 检查请求是否为获取名称的请求
+        // if (req.url?.endsWith('/name')) {
+        //     const dirPath = path.dirname(filePath);
+        //     const jsonFilePath = path.join(dirPath, 'metadata.json');
+        //     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
+        //         if (err) {
+        //             console.error('Error reading JSON file:', err);
+        //             res.writeHead(500, {'Content-Type': 'text/plain'});
+        //             res.end('Internal Server Error');
+        //         } else {
+        //             try {
+        //                 const info = JSON.parse(data);
+        //                 const imageName = info.name;
+        //                 res.writeHead(200, {'Content-Type': 'text/plain'});
+        //                 res.end(imageName);
+        //             } catch (parseErr) {
+        //                 console.error('Error parsing JSON:', parseErr);
+        //                 res.writeHead(500, {'Content-Type': 'text/plain'});
+        //                 res.end('Error parsing JSON');
+        //             }
+        //         }
+        //     });
+        //     return; // 处理完请求后返回
+        // }
 
-        // 检查请求是否为获取注释的请求
-        if (req.url?.endsWith('/annotation')) {
-            const dirPath = path.dirname(filePath);
-            const jsonFilePath = path.join(dirPath, 'metadata.json');
-            fs.readFile(jsonFilePath, 'utf8', (err, data) => {
-                if (err) {
-                    console.error('Error reading JSON file:', err);
-                    res.writeHead(500, {'Content-Type': 'text/plain'});
-                    res.end('Internal Server Error');
-                } else {
-                    try {
-                        const info = JSON.parse(data);
-                        const annotation = info.annotation;
-                        res.writeHead(200, {'Content-Type': 'text/plain'});
-                        res.end(annotation);
-                    } catch (parseErr) {
-                        console.error('Error parsing JSON:', parseErr);
-                        res.writeHead(500, {'Content-Type': 'text/plain'});
-                        res.end('Error parsing JSON');
-                    }
-                }
-            });
-            return; // 处理完请求后返回
-        }
-        // 检查请求是否为获取tags的请求
-        if (req.url?.endsWith('/tags')) {
-            const dirPath = path.dirname(filePath);
-            const jsonFilePath = path.join(dirPath, 'metadata.json');
-            fs.readFile(jsonFilePath, 'utf8', (err, data) => {
-                if (err) {
-                    console.error('Error reading JSON file:', err);
-                    res.writeHead(500, {'Content-Type': 'text/plain'});
-                    res.end('Internal Server Error');
-                } else {
-                    try {
-                        const info = JSON.parse(data);
-                        const tags = info.tags;
-                        res.writeHead(200, {'Content-Type': 'application/json'});
-                        res.end(tags.join(','));
-                    } catch (parseErr) {
-                        console.error('Error parsing JSON:', parseErr);
-                        res.writeHead(500, {'Content-Type': 'text/plain'});
-                        res.end('Error parsing JSON');
-                    }
-                }
-            });
-            return; // 处理完请求后返回
-        }
-        // 检查请求是否为获取url的请求
-        if (req.url?.endsWith('/url')) {
-            const dirPath = path.dirname(filePath);
-            const jsonFilePath = path.join(dirPath, 'metadata.json');
-            fs.readFile(jsonFilePath, 'utf8', (err, data) => {
-                if (err) {
-                    console.error('Error reading JSON file:', err);
-                    res.writeHead(500, {'Content-Type': 'text/plain'});
-                    res.end('Internal Server Error');
-                } else {
-                    try {
-                        const info = JSON.parse(data);
-                        const url = info.url;
-                        res.writeHead(200, {'Content-Type': 'text/plain'});
-                        res.end(url);
-                    } catch (parseErr) {
-                        console.error('Error parsing JSON:', parseErr);
-                        res.writeHead(500, {'Content-Type': 'text/plain'});
-                        res.end('Error parsing JSON');
-                    }
-                }
-            });
-            return; // 处理完请求后返回
-        }
+        // // 检查请求是否为获取注释的请求
+        // if (req.url?.endsWith('/annotation')) {
+        //     const dirPath = path.dirname(filePath);
+        //     const jsonFilePath = path.join(dirPath, 'metadata.json');
+        //     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
+        //         if (err) {
+        //             console.error('Error reading JSON file:', err);
+        //             res.writeHead(500, {'Content-Type': 'text/plain'});
+        //             res.end('Internal Server Error');
+        //         } else {
+        //             try {
+        //                 const info = JSON.parse(data);
+        //                 const annotation = info.annotation;
+        //                 res.writeHead(200, {'Content-Type': 'text/plain'});
+        //                 res.end(annotation);
+        //             } catch (parseErr) {
+        //                 console.error('Error parsing JSON:', parseErr);
+        //                 res.writeHead(500, {'Content-Type': 'text/plain'});
+        //                 res.end('Error parsing JSON');
+        //             }
+        //         }
+        //     });
+        //     return; // 处理完请求后返回
+        // }
+        // // 检查请求是否为获取tags的请求
+        // if (req.url?.endsWith('/tags')) {
+        //     const dirPath = path.dirname(filePath);
+        //     const jsonFilePath = path.join(dirPath, 'metadata.json');
+        //     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
+        //         if (err) {
+        //             console.error('Error reading JSON file:', err);
+        //             res.writeHead(500, {'Content-Type': 'text/plain'});
+        //             res.end('Internal Server Error');
+        //         } else {
+        //             try {
+        //                 const info = JSON.parse(data);
+        //                 const tags = info.tags;
+        //                 res.writeHead(200, {'Content-Type': 'application/json'});
+        //                 res.end(tags.join(','));
+        //             } catch (parseErr) {
+        //                 console.error('Error parsing JSON:', parseErr);
+        //                 res.writeHead(500, {'Content-Type': 'text/plain'});
+        //                 res.end('Error parsing JSON');
+        //             }
+        //         }
+        //     });
+        //     return; // 处理完请求后返回
+        // }
+        // // 检查请求是否为获取url的请求
+        // if (req.url?.endsWith('/url')) {
+        //     const dirPath = path.dirname(filePath);
+        //     const jsonFilePath = path.join(dirPath, 'metadata.json');
+        //     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
+        //         if (err) {
+        //             console.error('Error reading JSON file:', err);
+        //             res.writeHead(500, {'Content-Type': 'text/plain'});
+        //             res.end('Internal Server Error');
+        //         } else {
+        //             try {
+        //                 const info = JSON.parse(data);
+        //                 const url = info.url;
+        //                 res.writeHead(200, {'Content-Type': 'text/plain'});
+        //                 res.end(url);
+        //             } catch (parseErr) {
+        //                 console.error('Error parsing JSON:', parseErr);
+        //                 res.writeHead(500, {'Content-Type': 'text/plain'});
+        //                 res.end('Error parsing JSON');
+        //             }
+        //         }
+        //     });
+        //     return; // 处理完请求后返回
+        // }
 
         fs.stat(filePath, (err, stats) => {
             if (err) {
