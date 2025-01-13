@@ -14,8 +14,8 @@ export async function handlePasteEvent(clipboard: ClipboardEvent, editor: Editor
 
     // 检查剪贴板内容
     if (!clipboardText) {
-        // 如果没有文本，继续执行图片检测逻辑
-        console.log('剪贴板中没有文本，继续检测图片...');
+        // 如果没有文本，继续执行文件检测逻辑
+        console.log('剪贴板中没有文本，继续检测文件...');
         if (clipboard.clipboardData?.files.length) {
             const files = clipboard.clipboardData.files;
             for (let i = 0; i < files.length; i++) {
@@ -30,44 +30,67 @@ export async function handlePasteEvent(clipboard: ClipboardEvent, editor: Editor
                     // 监听 URL 更新事件
                     urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
                         if (file.type.startsWith('image/')) {
-                            editor.replaceSelection(`![](${latestDirUrl})`);
+                            editor.replaceSelection(`![${file.name}](${latestDirUrl})`);
                             new Notice('Eagle链接已转换');
                         } else {
-                            editor.replaceSelection(`[${file.type}](${latestDirUrl})`);
+                            editor.replaceSelection(`[${file.type} + ${file.name}](${latestDirUrl})`);
                         }
                     });
                     return; // 确保在成功处理后退出函数
 
                 } catch (error) {
-                    new Notice('文件上传失败');
+                    new Notice('文件上传失败，检查Eagle是否已启动');
                 }
             }
         }
-    } else {
-        // 检查剪贴板内容是否为Eagle链接
-        if (/eagle:\/\/item\/(\w+)/.test(clipboardText)) {
-            clipboard.preventDefault();
-            const updatedText = clipboardText.replace(/eagle:\/\/item\/(\w+)/g, (match, p1) => {
-                return `![](http://localhost:${port}/images/${p1}.info)`;
-            });
+    } else if (clipboardText && clipboardText.startsWith(pluginInstance.settings.libraryPath)) {
+        // 检查剪贴板内容是否为文件路径
+        // 使用正则表达式提取文件夹 ID 和文件名
+        const match = clipboardText.match(/images\\([^\\]+)\.info\\([^\\]+)\.(\w+)$/);
+        if (match && match[1] && match[2] && match[3]) {
+            const fileId = match[1];
+            const fileName = match[2];
+            const fileExt = match[3].toLowerCase();
+
+            // 根据文件扩展名决定格式
+            let updatedText;
+            if (fileExt === 'png' || fileExt === 'jpg' || fileExt === 'jpeg') {
+                clipboard.preventDefault();
+                updatedText = `![${fileName}](http://localhost:${port}/images/${fileId}.info)`;
+            } else {
+                clipboard.preventDefault();
+                updatedText = `[${fileName}](http://localhost:${port}/images/${fileId}.info)`;
+            }
             editor.replaceSelection(updatedText);
             new Notice('Eagle链接已转换');
-        } else if (/^https?:\/\/[^\s]+$/.test(clipboardText) && !clipboardText.startsWith('http://localhost')) {
-            // 如果是非局域网的URL
-            clipboard.preventDefault();
-            try {
-                // 确保 clipboardText 是字符串
-                const url = `${clipboardText}`;
-                await uploadByUrl(url, pluginInstance, editor);
-                new Notice('网址上传成功');
-            } catch (error) {
-                new Notice('网址上传失败');
-            }
+        } else {
+            new Notice('非Eagle链接');
+        }
+        return;
+    } else if (/^https?:\/\/[^\s]+$/.test(clipboardText) && !clipboardText.startsWith('http://localhost')) {
+        clipboard.preventDefault();
+        try {
+            // 确保 clipboardText 是字符串
+            const url = `${clipboardText}`;
+            await uploadByUrl(url, pluginInstance, editor);
+            new Notice('网址上传成功');
+        } catch (error) {
+            new Notice('网址上传失败');
         }
         console.log('剪贴板中有文本:', clipboardText);
         // ... 处理文本的逻辑 ...
     }
 }
+        // 检查剪贴板内容是否为Eagle链接
+        // if (/eagle:\/\/item\/(\w+)/.test(clipboardText)) {
+        //     clipboard.preventDefault();
+        //     const updatedText = clipboardText.replace(/eagle:\/\/item\/(\w+)/g, (match, p1) => {
+        //         return `![](http://localhost:${port}/images/${p1}.info)`;
+        //     });
+        //     editor.replaceSelection(updatedText);
+        //     new Notice('Eagle链接已转换');
+        // }
+        // 如果是非局域网的URL
 
 // 使用API上传剪贴板中的图片
 async function uploadByClipboard(file: File, pluginInstance: MyPlugin): Promise<void> {
@@ -88,7 +111,7 @@ async function uploadByClipboard(file: File, pluginInstance: MyPlugin): Promise<
     // 构建请求数据
     const data = {
         "path": filePath, // 使用文件的本地路径
-        "name": "测试",
+        "name": file.name,
         // "id":"M52OQMHX2A85A",
         "folderId": folderId,
         // "token": "58f7ecda-250f-4043-8ae0-cd11d673f680" // 请替换为实际的API令牌
@@ -117,8 +140,8 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
     const folderId = pluginInstance.settings.folderId || "";
     const data = {
         "url": url,
-        "name": "アルトリア･キャスター",
-        "tags": ["FGO", "アルトリア・キャスター"],
+        // "name": "アルトリア･キャスター",
+        // "tags": ["FGO", "アルトリア・キャスター"],
         "folderId": folderId
     };
 
@@ -169,14 +192,14 @@ export async function handleDropEvent(event: DragEvent, editor: Editor, port: nu
                 // 监听 URL 更新事件
                 urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
                     if (file.type.startsWith('image/')) {
-                        editor.replaceSelection(`![](${latestDirUrl})`);
+                        editor.replaceSelection(`![${file.name}](${latestDirUrl})`);
                         new Notice('Eagle链接已转换');
                     } else {
-                        editor.replaceSelection(`[${file.type}](${latestDirUrl})`);
+                        editor.replaceSelection(`[${file.type} + ${file.name}](${latestDirUrl})`);
                     }
                 });
             } catch (error) {
-                new Notice('文件上传失败');
+                new Notice('文件上传失败，检查Eagle是否已启动');
             }
         }
     }

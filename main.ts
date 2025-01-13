@@ -2,14 +2,20 @@ import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, PluginS
 import { startServer, refreshServer, stopServer } from './server';
 import { handlePasteEvent, handleDropEvent } from './urlHandler';
 import { onElement } from './onElement';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
+import { addCommandSynchronizedPageTabs,addCommandEagleJump } from "./addCommand-config";
+import { existsSync } from 'fs';
 
-interface MyPluginSettings {
+export interface MyPluginSettings {
 	mySetting: string;
 	port: number;
 	libraryPath: string;
 	folderId?: string;
+	clickView: boolean;
+	adaptiveRatio: number;
+	advancedID: boolean;
+	obsidianStoreId: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -17,6 +23,10 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	port: 6060,
 	libraryPath: '',
 	folderId: '',
+	clickView: false,
+	adaptiveRatio: 0.8,
+	advancedID: false,
+	obsidianStoreId: '',
 }
 
 export default class MyPlugin extends Plugin {
@@ -106,12 +116,71 @@ export default class MyPlugin extends Plugin {
 				return; // 如果链接不符合条件，直接返回
 			}
 		}, { capture: true });
+		// 注册点击事件(参考AttachFlow)
+		this.registerDomEvent(document, 'click', async (evt: MouseEvent) => {
+			// 检查设置中是否启用了点击查看功能
+			if (!this.settings.clickView) return;
+			
+			// 获取点击事件的目标元素
+			const target = evt.target as HTMLElement;
+			
+			// 如果目标元素不是图片，移除任何现有的放大图片并返回
+			if (target.tagName !== 'IMG') {
+				this.removeZoomedImage();
+				return;
+			}
+			
+			// 获取图片的边界矩形
+			const rect = target.getBoundingClientRect();
+			
+			// 计算图片的中心位置
+			const imageCenter = rect.left + rect.width / 2;
+			
+			// 如果点击位置在图片的左半部分或已经存在放大图片，则返回
+			if (evt.clientX <= imageCenter || document.getElementById('af-zoomed-image')) return;
+			
+			// 阻止默认的点击行为
+			evt.preventDefault();
+			
+			// 创建一个遮罩层
+			const mask = createZoomMask();
+			
+			// 创建放大的图片，并获取其原始宽度和高度
+			const { zoomedImage, originalWidth, originalHeight } = await createZoomedImage((target as HTMLImageElement).src, this.settings.adaptiveRatio);
+			
+			// 创建一个显示缩放比例的元素
+			const scaleDiv = createZoomScaleDiv(zoomedImage, originalWidth, originalHeight);
+			
+			// 为放大的图片添加滚轮事件监听器，用于缩放
+			zoomedImage.addEventListener('wheel', (e) => handleZoomMouseWheel(e, zoomedImage, originalWidth, originalHeight, scaleDiv));
+			
+			// 为放大的图片添加右键菜单事件监听器，用于重置大小
+			zoomedImage.addEventListener('contextmenu', (e) => handleZoomContextMenu(e, zoomedImage, originalWidth, originalHeight, scaleDiv));
+			
+			// 为放大的图片添加鼠标按下事件监听器，用于拖动
+			zoomedImage.addEventListener('mousedown', (e) => handleZoomDragStart(e, zoomedImage));
+			
+			// 为放大的图片添加双击事件监听器，用于自适应显示
+			zoomedImage.addEventListener('dblclick', (e) => {
+				adaptivelyDisplayImage(zoomedImage, originalWidth, originalHeight, this.settings.adaptiveRatio);
+				updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
+			});
+		});
 
+		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
+			// 如果按下的是 Escape 键，移除放大的图片
+			if (evt.key === 'Escape') {
+				this.removeZoomedImage();
+			}
+		});
+		// register all commands in addCommand function
+		addCommandSynchronizedPageTabs(this);
+		addCommandEagleJump(this);
 		// 添加自定义样式
 		const style = document.createElement('style');
 		style.textContent = `
 			.menu-item {
-				max-width: 300px; /* 设置最大宽度 */
+				max-width: 800px; /* 设置最大宽度 */
 				white-space: normal; /* 允许换行 */
 				word-wrap: break-word; /* 自动换行 */
 			}
@@ -142,7 +211,20 @@ export default class MyPlugin extends Plugin {
 				// { capture: true }
 			)
 		);
+
 	}
+	// 移除放大图片
+	removeZoomedImage() {
+		if (document.getElementById('af-zoomed-image')) {
+			const zoomedImage = document.getElementById('af-zoomed-image');
+			if (zoomedImage) document.body.removeChild(zoomedImage);
+			const scaleDiv = document.getElementById('af-scale-div');
+			if (scaleDiv) document.body.removeChild(scaleDiv);
+			const mask = document.getElementById('af-mask');
+			if (mask) document.body.removeChild(mask);
+		}
+	}
+
 	// // 注册链接点击事件
 	// registerLinkClickEvent(document: Document) {
 	// 	this.register(
@@ -412,6 +494,28 @@ export default class MyPlugin extends Plugin {
 						});
 					})
 			);	
+			// 复制源文件
+			menu.addItem((item: MenuItem) =>
+			item
+				.setIcon("copy")
+				.setTitle("Copy source file")
+				.onClick(() => {
+					const libraryPath = this.settings.libraryPath;
+					const localFilePath = path.join(
+						libraryPath,
+						"images",
+						`${id}.info`,
+						`${name}.${ext}`
+					);
+					try {
+						copyFileToClipboardCMD(localFilePath);
+						new Notice("Copied to clipboard!", 3000);
+					} catch (error) {
+						console.error(error);
+						new Notice("Failed to copy the file!", 3000);
+					}
+				})
+			);		
 			menu.addItem((item: MenuItem) =>
 				item
 					.setIcon("case-sensitive")
@@ -441,17 +545,31 @@ export default class MyPlugin extends Plugin {
 						new Notice(`Copied: ${url}`);
 					})
 			);
+			// 确保 tags 是一个数组
+			const tagsArray = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+
 			menu.addItem((item: MenuItem) =>
 				item
 					.setIcon("tags")
-					.setTitle(`Eagle tag: ${tags}`)
+					.setTitle(`Eagle tag: ${tagsArray.join(', ')}`)
 					.onClick(() => {
-						navigator.clipboard.writeText(tags);//该复制存在问题，待修改
-						new Notice(`Copied: ${tags}`);
+						const tagsString = tagsArray.join(', ');
+						navigator.clipboard.writeText(tagsString)
+							.then(() => new Notice(`Copied: ${tagsString}`))
+							.catch(err => new Notice('Failed to copy tags'));
 					})
 			);
-
-
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("wrench")
+					.setTitle("Modify properties")
+					.onClick(() => {
+						new ModifyPropertiesModal(this.app, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
+							// new Notice(`Name changed to: ${newName}`);
+							// 在这里处理保存逻辑
+						}).open();
+					})
+			);
 			// 其他菜单项可以继续使用 { id, name, ext } 数据
 		}
 
@@ -467,16 +585,177 @@ export default class MyPlugin extends Plugin {
 
 		// // 调试输出，确认菜单项添加
 		// console.log("Adding 'Clear image link' menu item");
+		menu.addItem((item: MenuItem) =>
+			item
+				.setIcon("copy")
+				.setTitle("Copy markdown link")
+				.onClick(async () => {
+					const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+					if (!editor) {
+						new Notice('未找到活动编辑器');
+						return;
+					}
 
+					const doc = editor.getDoc();
+					const lineCount = doc.lineCount();
+
+					let linkFound = false;
+
+					for (let line = 0; line < lineCount; line++) {
+						const lineText = doc.getLine(line);
+
+						// 使用正则表达式查找 Markdown 链接，匹配带叹号和不带叹号的链接
+						const regex = new RegExp(`(!?\\[.*?\\]\\(${url}\\))`, 'g');
+						const match = regex.exec(lineText);
+
+						if (match) {
+							const linkText = match[1]; // 获取完整的匹配文本
+							navigator.clipboard.writeText(linkText);
+							new Notice('链接已复制');
+							linkFound = true;
+							break; // 找到并复制后退出循环
+						}
+					}
+
+					if (!linkFound) {
+						new Notice('未找到链接');
+					}
+				})
+		);
 		menu.addItem((item: MenuItem) =>
 			item
 				.setIcon("trash-2")
-				.setTitle("Clear image link")
-				.onClick(async () => {
-					navigator.clipboard.writeText(url);
-					new Notice(`Copied: ${url}`);
+				.setTitle("Clear markdown link")
+				.onClick(() => {
+					const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+					if (!editor) {
+						new Notice('未找到活动编辑器');
+						return;
+					}
+
+					const doc = editor.getDoc();
+					const lineCount = doc.lineCount();
+
+					let linkFound = false;
+
+					for (let line = 0; line < lineCount; line++) {
+						const lineText = doc.getLine(line);
+
+						// 使用正则表达式查找 Markdown 链接，匹配带叹号和不带叹号的链接
+						const regex = new RegExp(`!?\\[.*?\\]\\(${url}\\)`, 'g');
+						const match = regex.exec(lineText);
+
+						if (match) {
+							const from = { line: line, ch: match.index };
+							const to = { line: line, ch: match.index + match[0].length };
+							doc.replaceRange('', from, to);
+							new Notice('链接已删除');
+							linkFound = true;
+							break; // 找到并删除后退出循环
+						}
+					}
+
+					if (!linkFound) {
+						new Notice('未找到链接');
+					}
 				})
 		);
+
+
+		// //this.app.metadataCache.resolvedLinks 在 Obsidian 中主要用于解析内部链接（即 Vault 内部的文件链接），而不适用于外部链接（如 HTTP/HTTPS 链接）。遍历所有的文档速度太慢，需要优化。
+		// menu.addItem((item: MenuItem) =>
+		// 	item
+		// 		.setIcon("trash-2")
+		// 		.setTitle("Clear file and link")
+		// 		.onClick(async () => {
+		// 			const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+		// 			if (!editor) {
+		// 				new Notice('未找到活动编辑器');
+		// 				return;
+		// 			}
+
+		// 			const doc = editor.getDoc();
+		// 			const lineCount = doc.lineCount();
+		// 			let linkCountInCurrentDoc = 0;
+		// 			const id = "M5U4IDJGU4PSE.info"; // 仅匹配 ID
+
+		// 			// 检查当前文档中链接的出现次数
+		// 			for (let line = 0; line < lineCount; line++) {
+		// 				const lineText = doc.getLine(line);
+		// 				const regex = new RegExp(id, 'g');
+		// 				if (regex.test(lineText)) {
+		// 					linkCountInCurrentDoc++;
+		// 				}
+		// 			}
+
+		// 			if (linkCountInCurrentDoc > 1) {
+		// 				// 如果链接在当前文档中出现多次，仅删除当前选中的链接
+		// 				for (let line = 0; line < lineCount; line++) {
+		// 					const lineText = doc.getLine(line);
+		// 					const regex = new RegExp(id, 'g');
+		// 					const match = regex.exec(lineText);
+
+		// 					if (match) {
+		// 						const from = { line: line, ch: match.index };
+		// 						const to = { line: line, ch: match.index + match[0].length };
+		// 						doc.replaceRange('', from, to);
+		// 						new Notice('链接已删除');
+		// 						return;
+		// 					}
+		// 				}
+		// 			} else {
+		// 				// 手动遍历所有 Markdown 文件，检查 ID
+		// 				const allFiles = this.app.vault.getMarkdownFiles();
+		// 				let linkFoundElsewhere = false;
+
+		// 				for (const file of allFiles) {
+		// 					const content = await this.app.vault.read(file);
+		// 					const regex = new RegExp(id, 'g');
+		// 					if (regex.test(content)) {
+		// 						linkFoundElsewhere = true;
+		// 						break;
+		// 					}
+		// 				}
+
+		// 				if (linkFoundElsewhere) {
+		// 					// 仅删除当前文档中的链接
+		// 					for (let line = 0; line < lineCount; line++) {
+		// 						const lineText = doc.getLine(line);
+		// 						const regex = new RegExp(id, 'g');
+		// 						const match = regex.exec(lineText);
+
+		// 						if (match) {
+		// 							const from = { line: line, ch: match.index };
+		// 							const to = { line: line, ch: match.index + match[0].length };
+		// 							doc.replaceRange('', from, to);
+		// 							new Notice('链接已删除，其余文档依旧引用该图片');
+		// 							return;
+		// 						}
+		// 					}
+		// 				} else {
+		// 					// 删除源文件
+		// 					const data = { "itemIds": [id] }; // 将 id 放入数组中
+
+		// 					const requestOptions: RequestInit = {
+		// 						method: 'POST',
+		// 						body: JSON.stringify(data),
+		// 						redirect: 'follow'
+		// 					};
+
+		// 					fetch("http://localhost:41595/api/item/moveToTrash", requestOptions)
+		// 						.then(response => response.json())
+		// 						.then(result => {
+		// 							console.log(result);
+		// 							new Notice('文件已删除');
+		// 						})
+		// 						.catch(error => {
+		// 							console.log('error', error);
+		// 							new Notice('删除文件时出错');
+		// 						});
+		// 				}
+		// 			}
+		// 		})
+		// );
 
 		// 确保菜单在异步操作后显示
 		menu.showAtPosition({ x: event.pageX, y: event.pageY });
@@ -531,6 +810,49 @@ class SampleSettingTab extends PluginSettingTab {
 					this.plugin.settings.folderId = value;
 					await this.plugin.saveSettings();
 				}));
+        new Setting(containerEl)
+            .setName("Click to view images")
+            .setDesc("Click the right half of the image to view the image in detail.")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.clickView)
+                    .onChange(async (value) => {
+                        this.plugin.settings.clickView = value;
+                        await this.plugin.saveSettings();
+                    });
+            });
+		new Setting(containerEl)
+            .setName("Synchronizing advanced URIs as labels")
+            .setDesc("Synchronize advanced URIs as tags when page ids exist.")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.advancedID)
+                    .onChange(async (value) => {
+                        this.plugin.settings.advancedID = value;
+                        await this.plugin.saveSettings();
+                    });
+            });
+		new Setting(containerEl)
+			.setName('Obsidian store ID')
+			.setDesc('Enter the Obsidian store ID')
+			.addText(text => text
+				.setPlaceholder('Enter Obsidian store ID')
+				.setValue(this.plugin.settings.obsidianStoreId)
+				.onChange(async (value) => {
+					this.plugin.settings.obsidianStoreId = value;
+					await this.plugin.saveSettings();
+				}));
+		new Setting(containerEl)
+            .setName('Adaptive image display ratio based on window size')
+            .setDesc('When the image exceeds the window size, the image is displayed adaptively according to the window size.')
+            .addSlider((slider) => {
+                slider.setLimits(0.1, 1, 0.05);
+                slider.setValue(this.plugin.settings.adaptiveRatio);
+                slider.onChange(async (value) => {
+                    this.plugin.settings.adaptiveRatio = value;
+                    new Notice(`Adaptive ratio: ${value}`);
+                    await this.plugin.saveSettings();
+                });
+                slider.setDynamicTooltip();
+            });
 
 		new Setting(containerEl)
 			.setName('Refresh Server')
@@ -541,4 +863,310 @@ class SampleSettingTab extends PluginSettingTab {
 					refreshServer(this.plugin.settings.libraryPath, this.plugin.settings.port);
 				}));
 	}
+}
+
+// 定义一个新的 Modal 类
+class ModifyPropertiesModal extends Modal {
+	id: string;
+	name: string;
+	annotation: string;
+	url: string;
+	tags: string[];
+	onSubmit: (id: string, name: string, annotation: string, url: string, tags: string[]) => void;
+
+	constructor(app: App, id: string, name: string, annotation: string, url: string, tags: string[], onSubmit: (id: string, name: string, annotation: string, url: string, tags: string[]) => void) {
+		super(app);
+		this.id = id;
+		this.name = name;
+		this.annotation = annotation;
+		this.url = url;
+		this.tags = tags;
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl('h2', { text: 'Modify Properties' });
+
+		// new Setting(contentEl)
+		// 	.setName('Name')
+		// 	.addText(text => text
+		// 		.setValue(this.name)
+		// 		.onChange(value => {
+		// 			this.name = value;
+		// 		})
+		// 		.inputEl.style.width = '400px'
+		// 	);
+
+		new Setting(contentEl)
+			.setName('Annotation')
+			.addText(text => text
+				.setValue(this.annotation)
+				.onChange(value => {
+					this.annotation = value;
+				})
+				.inputEl.style.width = '400px'
+			);
+
+		new Setting(contentEl)
+			.setName('URL')
+			.addText(text => text
+				.setValue(this.url)
+				.onChange(value => {
+					this.url = value;
+				})
+				.inputEl.style.width = '400px'
+			);
+
+		new Setting(contentEl)
+			.setName('Tags')
+			.setDesc('Separate tags use ,')
+			.addText(text => text
+				.setValue(this.tags.join(', '))
+				.onChange(value => {
+					this.tags = value.split(',').map(tag => tag.trim());
+				})
+				.inputEl.style.width = '400px'
+			);
+
+		new Setting(contentEl)
+			.addButton(btn => btn
+				.setButtonText('Save')
+				.setCta()
+				.onClick(() => {
+					// 构建数据对象
+					const data = {
+						id: this.id,
+						// name: this.name,
+						tags: this.tags,
+						annotation: this.annotation,
+						url: this.url,
+					};
+
+					// 设置请求选项
+					const requestOptions: RequestInit = {
+						method: 'POST',
+						body: JSON.stringify(data),
+						redirect: 'follow' as RequestRedirect
+					};
+
+					// 发送请求
+					fetch("http://localhost:41595/api/item/update", requestOptions)
+						.then(response => response.json())
+						.then(result => {
+							console.log(result);
+							new Notice('Data uploaded successfully');
+						})
+						.catch(error => {
+							console.log('error', error);
+							new Notice('Failed to upload data');
+						});
+
+					// 调用 onSubmit 回调
+					this.onSubmit(this.id, this.name, this.annotation, this.url, this.tags);
+					this.close();
+				}));
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+// 创建放大图片的遮罩层
+function createZoomMask(): HTMLDivElement {
+	const mask = document.createElement('div');
+	mask.id = 'af-mask';
+	mask.style.position = 'fixed';
+	mask.style.top = '0';
+	mask.style.left = '0';
+	mask.style.width = '100%';
+	mask.style.height = '100%';
+	mask.style.background = 'rgba(0, 0, 0, 0.5)';
+	mask.style.zIndex = '9998';
+	document.body.appendChild(mask);
+	return mask;
+}
+
+// 创建放大图片
+async function createZoomedImage(src: string, adaptive_ratio: number): Promise<{ zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number }> {
+	const zoomedImage = document.createElement('img');
+	zoomedImage.id = 'af-zoomed-image';
+	zoomedImage.src = src;
+	zoomedImage.style.position = 'fixed';
+	zoomedImage.style.zIndex = '9999';
+	zoomedImage.style.top = '50%';
+	zoomedImage.style.left = '50%';
+	zoomedImage.style.transform = 'translate(-50%, -50%)';
+	document.body.appendChild(zoomedImage);
+
+	let originalWidth = zoomedImage.naturalWidth;
+	let originalHeight = zoomedImage.naturalHeight;
+
+	adaptivelyDisplayImage(zoomedImage, originalWidth, originalHeight, adaptive_ratio);
+
+	return {
+		zoomedImage,
+		originalWidth,
+		originalHeight
+	};
+}
+
+// 自适应图片大小
+function adaptivelyDisplayImage(zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, adaptive_ratio: number) {
+	zoomedImage.style.left = `50%`;
+	zoomedImage.style.top = `50%`;
+	// 如果图片的尺寸大于屏幕尺寸，使其大小为屏幕尺寸的 adaptive_ratio
+	let screenRatio = adaptive_ratio;   // 屏幕尺寸比例
+	let screenWidth = window.innerWidth;
+	let screenHeight = window.innerHeight;
+
+	// Adjust initial size of the image if it exceeds screen size
+	if (originalWidth > screenWidth || originalHeight > screenHeight) {
+		if (originalWidth / screenWidth > originalHeight / screenHeight) {
+			zoomedImage.style.width = `${screenWidth * screenRatio}px`;
+			zoomedImage.style.height = 'auto';
+		} else {
+			zoomedImage.style.height = `${screenHeight * screenRatio}px`;
+			zoomedImage.style.width = 'auto';
+		}
+	} else {
+		zoomedImage.style.width = `${originalWidth}px`;
+		zoomedImage.style.height = `${originalHeight}px`;
+	}
+}
+
+// 创建百分比指示元素
+function createZoomScaleDiv(zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number): HTMLDivElement {
+	const scaleDiv = document.createElement('div');
+	scaleDiv.id = 'af-scale-div';
+	scaleDiv.classList.add('af-scale-div');
+	scaleDiv.style.zIndex = '10000';
+	updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
+	document.body.appendChild(scaleDiv);
+	return scaleDiv;
+}
+// 更新百分比指示元素
+function updateZoomScaleDiv(scaleDiv: HTMLDivElement, zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number) {
+	// 获取当前的宽度和高度
+	const width = zoomedImage.offsetWidth;
+	const height = zoomedImage.offsetHeight;
+	let scalePercent = width / originalWidth * 100;
+	scaleDiv.innerText = `${width}×${height} (${scalePercent.toFixed(1)}%)`;
+}
+
+// 滚轮事件处理器
+function handleZoomMouseWheel(e: WheelEvent, zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, scaleDiv: HTMLDivElement) {
+	e.preventDefault();
+	const mouseX = e.clientX;
+	const mouseY = e.clientY;
+	const scale = e.deltaY > 0 ? 0.95 : 1.05;
+	const newWidth = scale * zoomedImage.offsetWidth;
+	const newHeight = scale * zoomedImage.offsetHeight;
+	const newLeft = mouseX - (mouseX - zoomedImage.offsetLeft) * scale;
+	const newTop = mouseY - (mouseY - zoomedImage.offsetTop) * scale;
+	zoomedImage.style.width = `${newWidth}px`;
+	zoomedImage.style.height = `${newHeight}px`;
+	zoomedImage.style.left = `${newLeft}px`;
+	zoomedImage.style.top = `${newTop}px`;
+	updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
+}
+// 鼠标右键点击事件处理器
+function handleZoomContextMenu(e: MouseEvent, zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, scaleDiv: HTMLDivElement) {
+	e.preventDefault();
+	zoomedImage.style.width = `${originalWidth}px`;
+	zoomedImage.style.height = `${originalHeight}px`;
+	zoomedImage.style.left = `50%`;
+	zoomedImage.style.top = `50%`;
+	updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
+}
+
+// 拖动事件处理器
+function handleZoomDragStart(e: MouseEvent, zoomedImage: HTMLImageElement) {
+	// 事件处理的代码 ...
+	// 阻止浏览器默认的拖动事件
+	e.preventDefault();
+
+	// 记录点击位置
+	let clickX = e.clientX;
+	let clickY = e.clientY;
+
+	// 更新元素位置的回调函数
+	const updatePosition = (moveEvt: MouseEvent) => {
+		// 计算鼠标移动距离
+		let moveX = moveEvt.clientX - clickX;
+		let moveY = moveEvt.clientY - clickY;
+
+		// 定位图片位置
+		zoomedImage.style.left = `${zoomedImage.offsetLeft + moveX}px`;
+		zoomedImage.style.top = `${zoomedImage.offsetTop + moveY}px`;
+
+		// 更新点击位置
+		clickX = moveEvt.clientX;
+		clickY = moveEvt.clientY;
+	}
+
+	// 鼠标移动事件
+	document.addEventListener('mousemove', updatePosition);
+
+	// 鼠标松开事件
+	document.addEventListener('mouseup', function listener() {
+		// 移除鼠标移动和鼠标松开的监听器
+		document.removeEventListener('mousemove', updatePosition);
+		document.removeEventListener('mouseup', listener);
+	}, { once: true });
+}
+
+// 复制文件到剪贴板
+function copyFileToClipboardCMD(filePath: string) {
+
+	if (!existsSync(filePath)) {
+        console.error(`File ${filePath} does not exist`);
+        return;
+    }
+
+    const callback = (error: Error | null, stdout: string, stderr: string) => {
+        if (error) {
+			new Notice(`Error executing command: ${error.message}`, 3000);
+			console.error(`Error executing command: ${error.message}`);
+			return;
+        }
+    };
+
+    if (process.platform === 'darwin') {
+		// 解决方案1: 会调出Finder，产生瞬间的窗口，但是该复制操作完全是系统级别的，没有任何限制
+		execSync(`open -R "${filePath}"`);
+        execSync(`osascript -e 'tell application "System Events" to keystroke "c" using command down'`);
+        execSync(`osascript -e 'tell application "System Events" to keystroke "w" using command down'`);
+		execSync(`open -a "Obsidian.app"`);
+
+		// ----------------------------------------------
+		// 测试切换输入法方案: 模拟Shift键按下，但是失败了
+		// execSync(`osascript -e 'tell application "System Events" to key down shift'`);
+		// execSync(`osascript -e 'delay 0.05'`);
+		// execSync(`osascript -e 'tell application "System Events" to key up shift'`);
+		// ----------------------------------------------
+
+		// ----------------------------------------------
+		// 另一种解决方案，不会调出Finder，但是复制的文件无法粘贴到word或者微信中
+		// const appleScript = `
+		// 	on run args
+		// 		set the clipboard to POSIX file (first item of args)
+		// 	end
+		// 	`;
+		// exec(`osascript -e '${appleScript}' "${filePath}"`, callback);
+		// ----------------------------------------------
+
+    } else if (process.platform === 'linux') {
+		// 目前方案
+		// xclip -selection clipboard -t $(file --mime-type -b /path/to/your/file) -i /path/to/your/file
+        // exec(`xclip -selection c < ${filePath}`, callback);
+		// exec(`xclip -selection clipboard -t $(file --mime-type -b "${filePath}") -i "${filePath}"`, callback);
+    } else if (process.platform === 'win32') {
+		// 当文件路径包含 '
+		// 在PowerShell中，单引号字符串是直接的字符串，内部的单引号无法通过反斜线来转义，但是可以通过在单引号前再加一个单引号来进行转义。
+		let safeFilePath = filePath.replace(/'/g, "''");
+        exec(`powershell -command "Set-Clipboard -Path '${safeFilePath}'"`, callback);
+    }
 }
