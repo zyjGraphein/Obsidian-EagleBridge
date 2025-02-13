@@ -1,23 +1,15 @@
-const { spawn } = require('child_process');
+const { exec } = require('child_process');
 
-const filePath = 'H:\\cs\\ss.library\\images\\M5PMN59UDEH9X.info\\Clip你好.png';
+// 正确的路径定义
+const filePath = 'H:\\cs\\ss.library\\images\\M5PMN59UDEH9X.info\\Clip.png';
 
-// 先 chcp 65001，再执行 start "" "..."
-const child = spawn('cmd', [
-    '/c',
-    'chcp', '65001',
-    '&&',
-    'start', '', `"${filePath}"`
-], { shell: true, encoding: 'utf8' });
-
-child.on('error', (error) => {
-    console.error('Error opening file:', error);
-});
-
-child.on('exit', (code) => {
-    if (code === 0) {
-        console.log('File opened successfully');
-    } else {
-        console.error('Failed to open file with exit code:', code);
+// 使用 exec 打开文件，确保路径用双引号括起来
+exec(`start "" "${filePath}"`, { encoding: 'utf8' }, (error, stdout, stderr) => {
+    if (error) {
+        console.error('Error opening file:', error);
+        return;
     }
+    console.log('File opened successfully');
+    console.log('stdout:', stdout);
+    console.log('stderr:', stderr);
 });

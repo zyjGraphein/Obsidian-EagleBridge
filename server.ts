@@ -12,6 +12,54 @@ const urlEmitter = new EventEmitter();
 
 // let exportedData: { imageName?: string; annotation?: string } = {};
 
+function getContentType(ext: string): string {
+    switch (ext) {
+        case '.jpg':
+        case '.jpeg':
+            return 'image/jpeg';
+        case '.png':
+            return 'image/png';
+        case '.gif':
+            return 'image/gif';
+        case '.webp':
+            return 'image/webp';
+        case '.svg':
+            return 'image/svg+xml';
+        case '.pdf':
+            return 'application/pdf';
+        case '.mp4':
+            return 'video/mp4';
+        case '.mp3':
+            return 'audio/mpeg';
+        case '.ogg':
+            return 'audio/ogg';
+        case '.wav':
+            return 'audio/wav';
+        case '.json':
+            return 'application/json';
+        case '.xml':
+            return 'application/xml';
+        case '.ico':
+            return 'image/x-icon';
+        case '.txt':
+            return 'text/plain';
+        case '.csv':
+            return 'text/csv';
+        case '.html':
+            return 'text/html';
+        case '.css':
+            return 'text/css';
+        case '.js':
+            return 'application/javascript';
+        // case '.pptx':
+        //     return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        // case '.url':
+            // return 'text/plain';
+        default:
+            return '';
+    }
+}
+
 export function startServer(libraryPath: string, port: number) {
     if (isServerRunning) return;
     
@@ -39,7 +87,7 @@ export function startServer(libraryPath: string, port: number) {
         res.setHeader('Access-Control-Allow-Credentials', 'true');
 
         const filePath = path.join(libraryPath, req.url || '');
-        console.log('Requested file path:', filePath);
+        // console.log('Requested file path:', filePath);
 
         // // 检查请求是否为获取名称的请求
         // if (req.url?.endsWith('/name')) {
@@ -164,11 +212,21 @@ export function startServer(libraryPath: string, port: number) {
 
                             fs.readFile(imagePath, (err, data) => {
                                 if (err) {
-                                    console.error('Error reading image file:', err);
+                                    console.error('Error reading file:', err);
                                     res.writeHead(404, {'Content-Type': 'text/plain'});
-                                    res.end('Image not found');
+                                    res.end('File not found');
                                 } else {
-                                    res.writeHead(200, {'Content-Type': 'image/jpeg'});
+                                    if (imageExt === 'url') {
+                                        const content = data.toString('utf8');
+                                        const urlMatch = content.match(/URL=(.+)/i);
+                                        if (urlMatch && urlMatch[1]) {
+                                            res.writeHead(302, { 'Location': urlMatch[1] });
+                                            res.end();
+                                            return;
+                                        }
+                                    }
+                                    const contentType = getContentType(`.${imageExt}`);
+                                    res.writeHead(200, {'Content-Type': contentType});
                                     res.end(data);
                                 }
                             });
@@ -186,13 +244,25 @@ export function startServer(libraryPath: string, port: number) {
                         res.writeHead(500, {'Content-Type': 'text/plain'});
                         res.end('Internal Server Error');
                     } else {
-                        res.writeHead(200, {'Content-Type': 'image/jpeg'});
+                        const ext = path.extname(filePath).toLowerCase();
+                        if (ext === '.url') {
+                            const content = data.toString('utf8');
+                            const urlMatch = content.match(/URL=(.+)/i);
+                            if (urlMatch && urlMatch[1]) {
+                                res.writeHead(302, { 'Location': urlMatch[1] });
+                                res.end();
+                                return;
+                            }
+                        }
+                        const contentType = getContentType(ext);
+                        res.writeHead(200, {'Content-Type': contentType});
                         res.end(data);
                     }
                 });
             }
         });
     });
+
 
     server.listen(port, () => {
         isServerRunning = true;

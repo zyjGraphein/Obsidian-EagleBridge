@@ -98,10 +98,32 @@ export default class MyPlugin extends Plugin {
 				const cursor = editor.getCursor();
 				const lineText = editor.getLine(cursor.line);
 
-				// 使用正则表达式提取 URL
-				const urlMatch = lineText.match(/\bhttps?:\/\/[^\s)]+/g);
-				if (urlMatch) {
-					url = urlMatch[0];
+				// 使用正则表达式提取所有 URL
+				const urlMatches = Array.from(lineText.matchAll(/\bhttps?:\/\/[^\s)]+/g));
+				console.log(urlMatches);
+				let closestUrl = null;
+				let minDistance = Infinity;
+
+				
+				// 获取光标在行中的位置
+				const cursorPos = cursor.ch;
+				console.log(cursorPos);
+
+				// 遍历所有匹配的 URL，找到光标位置所在的 URL 区间
+				for (let i = 0; i < urlMatches.length; i++) {
+					const match = urlMatches[i];
+					const end = (match.index || 0) + match[0].length + 1;
+
+					// 判断光标位置是否在当前 URL 的区间内
+					if (cursorPos <= end) {
+						closestUrl = match[0];
+						console.log('光标位于链接区间:', i + 1);
+						break; // 找到后退出循环
+					}
+				}
+
+				if (closestUrl) {
+					url = closestUrl;
 					console.log('编辑模式下的链接:', url);
 				}
 			}
@@ -406,15 +428,24 @@ export default class MyPlugin extends Plugin {
 		return null;
 	}
 	
-	async addEagleImageMenuPreviewMode(menu: Menu, url: string, event: MouseEvent) {
-		const imageInfo = await this.fetchImageInfo(url);
+	async addEagleImageMenuPreviewMode(menu: Menu, oburl: string, event: MouseEvent) {
+		const imageInfo = await this.fetchImageInfo(oburl);
 
 		if (imageInfo) {
 			const { id, name, ext, annotation, tags, url } = imageInfo;
 			// const infoToCopy = `ID: ${id}, Name: ${name}, Ext: ${ext}, Annotation: ${annotation}, Tags: ${tags}, URL: ${url}`;
 			// navigator.clipboard.writeText(infoToCopy);
 			// new Notice(`Copied: ${infoToCopy}`);
-
+			menu.addItem((item: MenuItem) =>
+				item
+					.setIcon("file-symlink")
+					.setTitle("Open in obsidian")
+					.onClick((event: MouseEvent) => {
+						// console.log(oburl);
+						window.open(oburl, '_blank');
+					})
+			);
+			
 			menu.addItem((item: MenuItem) =>
 				item
 					.setIcon("file-symlink")
