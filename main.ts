@@ -16,6 +16,7 @@ export interface MyPluginSettings {
 	adaptiveRatio: number;
 	advancedID: boolean;
 	obsidianStoreId: string;
+	imageSize: number | undefined;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -27,6 +28,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	adaptiveRatio: 0.8,
 	advancedID: false,
 	obsidianStoreId: '',
+	imageSize: undefined
 }
 
 export default class MyPlugin extends Plugin {
@@ -886,6 +888,17 @@ class SampleSettingTab extends PluginSettingTab {
             });
 
 		new Setting(containerEl)
+		.setName('Image size')
+		.setDesc('Image default size')
+		.addText(text => text
+			.setPlaceholder('Enter image size')
+			.setValue(this.plugin.settings.imageSize?.toString() || '')
+			.onChange(async (value) => {
+				this.plugin.settings.imageSize = value ? parseInt(value) : undefined;
+				await this.plugin.saveSettings();
+			}));
+
+		new Setting(containerEl)
 			.setName('Refresh Server')
 			.setDesc('Refresh the server with the new settings')
 			.addButton(button => button
@@ -1188,7 +1201,6 @@ function copyFileToClipboardCMD(filePath: string) {
 		// 	`;
 		// exec(`osascript -e '${appleScript}' "${filePath}"`, callback);
 		// ----------------------------------------------
-
     } else if (process.platform === 'linux') {
 		// 目前方案
 		// xclip -selection clipboard -t $(file --mime-type -b /path/to/your/file) -i /path/to/your/file

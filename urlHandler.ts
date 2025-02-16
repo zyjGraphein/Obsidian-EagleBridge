@@ -63,7 +63,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
                     const fileExt = path.extname(filePath).toLowerCase();
 
                     if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
-                        editor.replaceSelection(`![${fileName}](${latestDirUrl})`);
+                        editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
                         new Notice('Eagle链接已转换');
                     } else {
                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
@@ -84,7 +84,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
 
                 if (['.png', '.jpg', '.jpeg'].includes(fileExt)) {
                     clipboardEvent.preventDefault();
-                    updatedText = `![${fileName}](http://localhost:${port}/${urlPath})`;
+                    updatedText = `![${fileName}|${pluginInstance.settings.imageSize}](http://localhost:${port}/${urlPath})`;
                 } else {
                     clipboardEvent.preventDefault();
                     updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
@@ -365,7 +365,7 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
                         const fileExt = path.extname(filePath).toLowerCase();
 
                         if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
-                            editor.replaceSelection(`![${fileName}](${latestDirUrl})`);
+                            editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
                             new Notice('Eagle链接已转换');
                         } else {
                             editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
@@ -385,7 +385,7 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
                     const urlPath = match[0].replace(/\\/g, '/'); // 将反斜杠替换为正斜杠
 
                     if (['.png', '.jpg', '.jpeg'].includes(fileExt)) {
-                        updatedText = `![${fileName}](http://localhost:${port}/${urlPath})`;
+                        updatedText = `![${fileName}|${pluginInstance.settings.imageSize}](http://localhost:${port}/${urlPath})`;
                     } else {
                         updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
                     }
