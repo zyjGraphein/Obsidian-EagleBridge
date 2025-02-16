@@ -15,16 +15,30 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
     // 获取剪贴板中的纯文本内容
     let clipboardText = clipboardEvent.clipboardData?.getData('text/plain');
     let filePath = "";
-    const os = process.platform;
 
     if (clipboardEvent.clipboardData?.files.length) {
+        clipboardEvent.preventDefault();
         const file = clipboardEvent.clipboardData.files[0];
         filePath = electron.webUtils.getPathForFile(file);
+
+        if (!filePath) { // 如果 filePath 不存在
+            const tempDir = os.tmpdir(); // 使用 os.tmpdir() 获取临时目录
+            const uploadDir = path.join(tempDir, 'obsidian-uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir);
+            }
+
+            // 将文件保存到临时目录
+            filePath = path.join(uploadDir, file.name);
+            // console.log('File path2:', filePath); // 在控制台打印文件路径
+            const buffer = await file.arrayBuffer();
+            fs.writeFileSync(filePath, Buffer.from(buffer));
+        }
     }
     
     if (clipboardText && /^https?:\/\/[^\s]+$/.test(clipboardText) && !clipboardText.startsWith('http://localhost')) {
         // 如果文本内容为 URL 且不以 http://localhost 开头
-        clipboardEvent.preventDefault();
+        
         try {
             const url = `${clipboardText}`;
             await uploadByUrl(url, pluginInstance, editor);
@@ -37,6 +51,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
         // 如果 filePath 存在
         clipboardEvent.preventDefault();
         if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
+            console.log('filePath1:', filePath);
             // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
             try {
                 await uploadByClipboard(filePath, pluginInstance);
