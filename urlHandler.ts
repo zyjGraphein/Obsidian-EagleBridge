@@ -38,15 +38,20 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
     
     if (clipboardText && /^https?:\/\/[^\s]+$/.test(clipboardText) && !clipboardText.startsWith('http://localhost')) {
         // 如果文本内容为 URL 且不以 http://localhost 开头
-        
-        try {
-            const url = `${clipboardText}`;
-            await uploadByUrl(url, pluginInstance, editor);
-            new Notice('网址上传成功，请等待Eagle链接更新');
-        } catch (error) {
-            new Notice('网址上传失败');
+
+        if (pluginInstance.settings.websiteUpload) {
+            clipboardEvent.preventDefault();
+            try {
+                const url = `${clipboardText}`;
+                await uploadByUrl(url, pluginInstance, editor);
+                new Notice('网址上传成功，请等待Eagle链接更新');
+            } catch (error) {
+                new Notice('网址上传失败');
+            }
+            console.log('剪贴板中有文本:', clipboardText);
+        } else {
+            return;
         }
-        console.log('剪贴板中有文本:', clipboardText);
     } else if (filePath) {
         // 如果 filePath 存在
         clipboardEvent.preventDefault();
@@ -185,9 +190,10 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
             // 提取 ID
             console.log('latestDirUrl:', latestDirUrl);
             const match = latestDirUrl.match(/images\/([^/]+)\.info/);
+
             if (match && match[1]) {
                 const fileId = match[1];
-
+                 await new Promise(resolve => setTimeout(resolve, 2000));   
                 // 设置请求选项
                 const requestOptions = {
                     method: 'GET',

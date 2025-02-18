@@ -12,7 +12,7 @@ const urlEmitter = new EventEmitter();
 
 // let exportedData: { imageName?: string; annotation?: string } = {};
 
-function getContentType(ext: string): string {
+function getContentType(ext: string): string | null {
     switch (ext) {
         case '.jpg':
         case '.jpeg':
@@ -56,7 +56,7 @@ function getContentType(ext: string): string {
         // case '.url':
             // return 'text/plain';
         default:
-            return '';
+            return null;
     }
 }
 
@@ -226,6 +226,11 @@ export function startServer(libraryPath: string, port: number) {
                                         }
                                     }
                                     const contentType = getContentType(`.${imageExt}`);
+                                    if (contentType === null) {
+                                        res.writeHead(204);
+                                        res.end();
+                                        return;
+                                    }
                                     res.writeHead(200, {'Content-Type': contentType});
                                     res.end(data);
                                 }
@@ -245,6 +250,12 @@ export function startServer(libraryPath: string, port: number) {
                         res.end('Internal Server Error');
                     } else {
                         const ext = path.extname(filePath).toLowerCase();
+                        const contentType = getContentType(ext);
+                        if (contentType === null) {
+                            res.writeHead(204);
+                            res.end();
+                            return;
+                        }
                         if (ext === '.url') {
                             const content = data.toString('utf8');
                             const urlMatch = content.match(/URL=(.+)/i);
@@ -254,7 +265,6 @@ export function startServer(libraryPath: string, port: number) {
                                 return;
                             }
                         }
-                        const contentType = getContentType(ext);
                         res.writeHead(200, {'Content-Type': contentType});
                         res.end(data);
                     }

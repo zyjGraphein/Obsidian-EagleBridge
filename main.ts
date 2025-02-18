@@ -17,6 +17,8 @@ export interface MyPluginSettings {
 	advancedID: boolean;
 	obsidianStoreId: string;
 	imageSize: number | undefined;
+	websiteUpload: boolean;
+	// autoSyncTag: boolean;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -28,7 +30,9 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	adaptiveRatio: 0.8,
 	advancedID: false,
 	obsidianStoreId: '',
-	imageSize: undefined
+	imageSize: undefined,
+	websiteUpload: false,
+	// autoSyncTag: false
 }
 
 export default class MyPlugin extends Plugin {
@@ -854,8 +858,8 @@ class SampleSettingTab extends PluginSettingTab {
                     });
             });
 		new Setting(containerEl)
-            .setName("Synchronizing advanced URIs as labels")
-            .setDesc("Synchronize advanced URIs as tags when page ids exist.")
+            .setName("Synchronizing advanced URI as a tag")
+            .setDesc("Synchronize advanced URI as a tag when page ids exist.")
             .addToggle((toggle) => {
                 toggle.setValue(this.plugin.settings.advancedID)
                     .onChange(async (value) => {
@@ -897,6 +901,28 @@ class SampleSettingTab extends PluginSettingTab {
 				this.plugin.settings.imageSize = value ? parseInt(value) : undefined;
 				await this.plugin.saveSettings();
 			}));
+		
+		new Setting(containerEl)
+		.setName('Website upload')
+		.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively.')
+		.addToggle((toggle) => {
+			toggle.setValue(this.plugin.settings.websiteUpload)
+				.onChange(async (value) => {
+					this.plugin.settings.websiteUpload = value;
+					await this.plugin.saveSettings();
+				});
+		});
+
+		// new Setting(containerEl)
+		// .setName('Auto-synchronize tag')
+		// .setDesc('Automatically synchronize the tag in the yaml area of the .md file to the tag of the eagle attachment when an image or attachment is added to the target .md file.(When Synchronizing advanced URI as a tag is turned on, the URI is automatically synchronized.)')
+		// .addToggle((toggle) => {
+		// 	toggle.setValue(this.plugin.settings.autoSyncTag)
+		// 		.onChange(async (value) => {
+		// 			this.plugin.settings.autoSyncTag = value;
+		// 			await this.plugin.saveSettings();
+		// 		});
+		// });
 
 		new Setting(containerEl)
 			.setName('Refresh Server')
