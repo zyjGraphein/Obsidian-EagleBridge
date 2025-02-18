@@ -1,4 +1,4 @@
-# Obsidian Sample Plugin
+# Obsidian EagleBridge
 
 This is a sample plugin for Obsidian (https://obsidian.md).
 
