@@ -1,5 +1,10 @@
 # Obsidian EagleBridge
+<div align="center">
 
+![GitHub Downloads (specific asset, all releases)|150](https://img.shields.io/github/downloads/zyjGraphein/EagleBridge/main.js) ![GitHub Downloads (specific asset, latest release)](https://img.shields.io/github/downloads/zyjGraphein/EagleBridge/latest/main.js)
+
+【[中文](./ZH.md) / EN】
+</div>
 This is a sample plugin for Obsidian (https://obsidian.md).
 
 This project uses TypeScript to provide type checking and documentation.
