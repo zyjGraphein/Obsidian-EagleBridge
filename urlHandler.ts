@@ -7,6 +7,7 @@ import MyPlugin from './main';
 import { print, setDebug } from './main';
 const electron = require('electron')
 const clipboard = electron.clipboard;
+
 // import { clipboard } from 'electron';
 // const { remote } = require('electron');  
 // declare const app: any; // 声明全局 app 变量
@@ -45,7 +46,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
             try {
                 const url = `${clipboardText}`;
                 await uploadByUrl(url, pluginInstance, editor);
-                new Notice('网址上传成功，请等待Eagle链接更新');
+                new Notice('网址上传成功，请等待Eagle链接更新', 12000);
             } catch (error) {
                 new Notice('网址上传失败');
             }

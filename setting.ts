@@ -48,7 +48,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Port')
-			.setDesc('Enter the port number for the server')
+			.setDesc('Enter the port number of the server, ranging from 1000 to 65535, and do not modify it after setting.')
 			.addText(text => text
 				.setPlaceholder('Enter port number')
 				.setValue(this.plugin.settings.port.toString())
@@ -100,7 +100,7 @@ export class SampleSettingTab extends PluginSettingTab {
 		// 		.setDisabled(true)); // 禁用输入框，只显示有效路径
 
 		new Setting(containerEl)
-			.setName('Folder ID')
+			.setName('Eagle Folder ID')
 			.setDesc('Enter the folder ID for Eagle')
 			.addText(text => text
 				.setPlaceholder('Enter folder ID')
@@ -109,6 +109,18 @@ export class SampleSettingTab extends PluginSettingTab {
 					this.plugin.settings.folderId = value;
 					await this.plugin.saveSettings();
 				}));
+		
+		new Setting(containerEl)
+		.setName('Image size')
+		.setDesc('Default size for image import')
+		.addText(text => text
+			.setPlaceholder('Enter image size')
+			.setValue(this.plugin.settings.imageSize?.toString() || '')
+			.onChange(async (value) => {
+				this.plugin.settings.imageSize = value ? parseInt(value) : undefined;
+				await this.plugin.saveSettings();
+			}));
+
         new Setting(containerEl)
             .setName("Click to view images")
             .setDesc("Click the right half of the image to view the image in detail.")
@@ -119,6 +131,21 @@ export class SampleSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     });
             });
+
+		new Setting(containerEl)
+		.setName('Adaptive image display ratio based on window size')
+		.setDesc('When the image exceeds the window size, the image is displayed adaptively according to the window size.')
+		.addSlider((slider) => {
+			slider.setLimits(0.1, 1, 0.05);
+			slider.setValue(this.plugin.settings.adaptiveRatio);
+			slider.onChange(async (value) => {
+				this.plugin.settings.adaptiveRatio = value;
+				new Notice(`Adaptive ratio: ${value}`);
+				await this.plugin.saveSettings();
+			});
+			slider.setDynamicTooltip();
+		});
+
 		new Setting(containerEl)
             .setName("Synchronizing advanced URI as a tag")
             .setDesc("Synchronize advanced URI as a tag when page ids exist.")
@@ -129,6 +156,7 @@ export class SampleSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     });
             });
+
 		new Setting(containerEl)
 			.setName('Obsidian store ID')
 			.setDesc('Enter the Obsidian store ID')
@@ -139,31 +167,7 @@ export class SampleSettingTab extends PluginSettingTab {
 					this.plugin.settings.obsidianStoreId = value;
 					await this.plugin.saveSettings();
 				}));
-		new Setting(containerEl)
-            .setName('Adaptive image display ratio based on window size')
-            .setDesc('When the image exceeds the window size, the image is displayed adaptively according to the window size.')
-            .addSlider((slider) => {
-                slider.setLimits(0.1, 1, 0.05);
-                slider.setValue(this.plugin.settings.adaptiveRatio);
-                slider.onChange(async (value) => {
-                    this.plugin.settings.adaptiveRatio = value;
-                    new Notice(`Adaptive ratio: ${value}`);
-                    await this.plugin.saveSettings();
-                });
-                slider.setDynamicTooltip();
-            });
 
-		new Setting(containerEl)
-		.setName('Image size')
-		.setDesc('Image default size')
-		.addText(text => text
-			.setPlaceholder('Enter image size')
-			.setValue(this.plugin.settings.imageSize?.toString() || '')
-			.onChange(async (value) => {
-				this.plugin.settings.imageSize = value ? parseInt(value) : undefined;
-				await this.plugin.saveSettings();
-			}));
-		
 		new Setting(containerEl)
 		.setName('Website upload')
 		.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively.')
@@ -176,6 +180,15 @@ export class SampleSettingTab extends PluginSettingTab {
 		});
 
 		new Setting(containerEl)
+			.setName('Refresh Server')
+			.setDesc('Refresh the server with the new settings')
+			.addButton(button => button
+				.setButtonText('Refresh')
+				.onClick(() => {
+					refreshServer(this.plugin.settings.libraryPath, this.plugin.settings.port);
+				}));
+
+		new Setting(containerEl)
 			.setName('Debug Mode')
 			.setDesc('Enable or disable debug mode')
 			.addToggle(toggle => toggle
@@ -184,15 +197,6 @@ export class SampleSettingTab extends PluginSettingTab {
 					this.plugin.settings.debug = value;
 					await this.plugin.saveSettings();
 				}));
-				
-
-		new Setting(containerEl)
-			.setName('Refresh Server')
-			.setDesc('Refresh the server with the new settings')
-			.addButton(button => button
-				.setButtonText('Refresh')
-				.onClick(() => {
-					refreshServer(this.plugin.settings.libraryPath, this.plugin.settings.port);
-				}));
+			
 	}
 }

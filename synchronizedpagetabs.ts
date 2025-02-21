@@ -1,5 +1,5 @@
 import { App, Notice, TFile } from 'obsidian';
-import { MyPluginSettings } from './main';
+import { MyPluginSettings } from './setting';
 import { print, setDebug } from './main';
 
 export async function syncTags(app: App, settings: MyPluginSettings) {
@@ -28,6 +28,7 @@ export async function syncTags(app: App, settings: MyPluginSettings) {
 
 			// 发送更新后的标签
 			await updateTagsForInfoFile(id, newTags);
+			new Notice('同步标签成功');
 		}
 	} catch (error) {
 		print('Error syncing tags:', error);
