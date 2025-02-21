@@ -20,6 +20,7 @@ export interface MyPluginSettings {
 	websiteUpload: boolean;
 	// autoSyncTag: boolean;
 	libraryPaths: string[];
+	debug: boolean;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -35,6 +36,20 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	websiteUpload: false,
 	// autoSyncTag: false,
 	libraryPaths: [],
+	debug: false,
+}
+
+let DEBUG = false;
+
+export const print = (message?: any, ...optionalParams: any[]) => {
+	// console.log('DEBUG status:', DEBUG); // 调试输出
+	if (DEBUG) {
+		console.log(message, ...optionalParams);
+	}
+}
+
+export function setDebug(value: boolean) {
+	DEBUG = value;
 }
 
 export default class MyPlugin extends Plugin {
@@ -72,12 +87,16 @@ export default class MyPlugin extends Plugin {
 			})
 		);
 
+		// 在插件加载时设置 DEBUG 状态
+		console.log('Debug setting:', this.settings.debug);
+		setDebug(this.settings.debug);
+
 		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
 			const target = event.target as HTMLElement;
 
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!activeView) {
-				console.log('未找到活动视图');
+				print('未找到活动视图');
 				return;
 			}
 
@@ -94,7 +113,7 @@ export default class MyPlugin extends Plugin {
 				const linkElement = target as HTMLAnchorElement;
 				if (linkElement && linkElement.href) {
 					url = linkElement.href;
-					console.log('预览模式下的链接:', url);
+					print('预览模式下的链接:', url);
 				}
 			} else {
 				// 编辑模式下的处理逻辑
@@ -108,14 +127,14 @@ export default class MyPlugin extends Plugin {
 
 				// 使用正则表达式提取所有 URL
 				const urlMatches = Array.from(lineText.matchAll(/\bhttps?:\/\/[^\s)]+/g));
-				console.log(urlMatches);
+				print(urlMatches);
 				let closestUrl = null;
 				let minDistance = Infinity;
 
 				
 				// 获取光标在行中的位置
 				const cursorPos = cursor.ch;
-				console.log(cursorPos);
+				print(cursorPos);
 
 				// 遍历所有匹配的 URL，找到光标位置所在的 URL 区间
 				for (let i = 0; i < urlMatches.length; i++) {
@@ -125,14 +144,14 @@ export default class MyPlugin extends Plugin {
 					// 判断光标位置是否在当前 URL 的区间内
 					if (cursorPos <= end) {
 						closestUrl = match[0];
-						console.log('光标位于链接区间:', i + 1);
+						print('光标位于链接区间:', i + 1);
 						break; // 找到后退出循环
 					}
 				}
 
 				if (closestUrl) {
 					url = closestUrl;
-					console.log('编辑模式下的链接:', url);
+					print('编辑模式下的链接:', url);
 				}
 			}
 
@@ -140,7 +159,7 @@ export default class MyPlugin extends Plugin {
 			if (url && url.match(/^http:\/\/localhost:\d+\/images\/[^.]+\.info$/)) {
 				event.preventDefault();
 				event.stopPropagation();
-				console.log('阻止了链接:', url);
+				print('阻止了链接:', url);
 				this.handleLinkClick(event, url);
 			} else {
 				return; // 如果链接不符合条件，直接返回
@@ -436,13 +455,13 @@ export default class MyPlugin extends Plugin {
 				if (result.status === "success" && result.data) {
 					return result.data;
 				} else {
-					console.log('Failed to fetch item info');
+					print('Failed to fetch item info');
 				}
 			} catch (error) {
-				console.log('Error fetching item info', error);
+				print('Error fetching item info', error);
 			}
 		} else {
-			console.log('Invalid image source format');
+			print('Invalid image source format');
 		}
 		return null;
 	}
@@ -491,7 +510,7 @@ export default class MyPlugin extends Plugin {
 			
 						// 打印路径用于调试
 						new Notice(`文件的真实路径是: ${localFilePath}`);
-						console.log(`文件的真实路径是: ${localFilePath}`);
+						print(`文件的真实路径是: ${localFilePath}`);
 			
 						// 使用 spawn 调用 explorer.exe 打开文件
 						const child = spawn('explorer.exe', [localFilePath], { shell: true });
@@ -503,7 +522,7 @@ export default class MyPlugin extends Plugin {
 
 						child.on('exit', (code) => {
 							if (code === 0) {
-								console.log('文件已成功打开');
+								print('文件已成功打开');
 							} else {
 								console.error('文件未能正常打开，exit code:', code);
 							}
@@ -525,7 +544,7 @@ export default class MyPlugin extends Plugin {
 			
 						// 打印路径用于调试
 						new Notice(`文件的真实路径是: ${localFilePath}`);
-						console.log(`文件的真实路径是: ${localFilePath}`);
+						print(`文件的真实路径是: ${localFilePath}`);
 			
 						// 使用 rundll32 调用系统的"打开方式"对话框
 						const child = spawn('rundll32', ['shell32.dll,OpenAs_RunDLL', localFilePath], { shell: true });
@@ -537,7 +556,7 @@ export default class MyPlugin extends Plugin {
 
 						child.on('exit', (code) => {
 							if (code === 0) {
-								console.log('文件已成功打开');
+								print('文件已成功打开');
 							} else {
 								console.error('文件未能正常打开，exit code:', code);
 							}
@@ -591,7 +610,7 @@ export default class MyPlugin extends Plugin {
 					.setIcon("link-2")
 					.setTitle(`Eagle url: ${url}`)
 					.onClick(() => {
-						navigator.clipboard.writeText(url);
+						// navigator.clipboard.writeText(url);
 						window.open(url, '_self'); 
 						new Notice(`Copied: ${url}`);
 					})
@@ -958,7 +977,16 @@ class SampleSettingTab extends PluginSettingTab {
 				});
 		});
 
-
+		new Setting(containerEl)
+			.setName('Debug Mode')
+			.setDesc('Enable or disable debug mode')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.debug)
+				.onChange(async (value) => {
+					this.plugin.settings.debug = value;
+					await this.plugin.saveSettings();
+				}));
+				
 
 		new Setting(containerEl)
 			.setName('Refresh Server')
@@ -1061,11 +1089,11 @@ class ModifyPropertiesModal extends Modal {
 					fetch("http://localhost:41595/api/item/update", requestOptions)
 						.then(response => response.json())
 						.then(result => {
-							console.log(result);
+							print(result);
 							new Notice('Data uploaded successfully');
 						})
 						.catch(error => {
-							console.log('error', error);
+							print('error', error);
 							new Notice('Failed to upload data');
 						});
 

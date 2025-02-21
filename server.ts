@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import chokidar from 'chokidar';
 import { EventEmitter } from 'events';
+import { print, setDebug } from './main';
 
 let server: http.Server;
 let isServerRunning = false;
@@ -276,7 +277,7 @@ export function startServer(libraryPath: string, port: number) {
 
     server.listen(port, () => {
         isServerRunning = true;
-        console.log(`Server is running at http://localhost:${port}/`);
+        print(`Server is running at http://localhost:${port}/`);
     });
 }
 
@@ -284,7 +285,7 @@ export function refreshServer(libraryPath: string, port: number) {
     if (!isServerRunning) return;
     server.close(() => {
         isServerRunning = false;
-        console.log('Server stopped for refresh.');
+        print('Server stopped for refresh.');
         startServer(libraryPath, port);
     });
 }
@@ -293,7 +294,7 @@ export function stopServer() {
     if (isServerRunning) {
         server.close(() => {
             isServerRunning = false;
-            console.log('Server stopped.');
+            print('Server stopped.');
         });
     }
 }

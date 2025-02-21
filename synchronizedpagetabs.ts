@@ -1,5 +1,6 @@
 import { App, Notice, TFile } from 'obsidian';
 import { MyPluginSettings } from './main';
+import { print, setDebug } from './main';
 
 export async function syncTags(app: App, settings: MyPluginSettings) {
 	try {
@@ -29,7 +30,7 @@ export async function syncTags(app: App, settings: MyPluginSettings) {
 			await updateTagsForInfoFile(id, newTags);
 		}
 	} catch (error) {
-		console.error('Error syncing tags:', error);
+		print('Error syncing tags:', error);
 		new Notice('Error syncing tags. Check console for details.');
 	}
 }
@@ -59,7 +60,7 @@ async function updateTagsForInfoFile(id: string, tags: string[]) {
 
 	const response = await fetch("http://localhost:41595/api/item/update", requestOptions);
 	const result = await response.json();
-	console.log(`Updated tags for ${id}:`, result);
+	print(`Updated tags for ${id}:`, result);
 }
 
 function getYamlTagsFromCurrentFile(app: App): string[] {

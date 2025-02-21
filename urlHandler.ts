@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { getLatestDirUrl, urlEmitter } from './server';
 import MyPlugin from './main';
+import { print, setDebug } from './main';
 const electron = require('electron')
 const clipboard = electron.clipboard;
 // import { clipboard } from 'electron';
@@ -48,7 +49,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
             } catch (error) {
                 new Notice('网址上传失败');
             }
-            console.log('剪贴板中有文本:', clipboardText);
+            print('剪贴板中有文本:', clipboardText);
         } else {
             return;
         }
@@ -56,7 +57,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
         // 如果 filePath 存在
         clipboardEvent.preventDefault();
         if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
-            console.log('filePath1:', filePath);
+            print('filePath1:', filePath);
             // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
             try {
                 await uploadByClipboard(filePath, pluginInstance);
@@ -165,7 +166,7 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
         "folderId": folderId
     };
 
-    console.log('Request data:', data); // 调试输出请求数据
+    print('Request data:', data); // 调试输出请求数据
 
     const requestOptions = {
         method: 'POST',
@@ -188,7 +189,7 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
         // 监听 URL 更新事件
         urlEmitter.once('urlUpdated', async (latestDirUrl: string) => {
             // 提取 ID
-            console.log('latestDirUrl:', latestDirUrl);
+            print('latestDirUrl:', latestDirUrl);
             const match = latestDirUrl.match(/images\/([^/]+)\.info/);
 
             if (match && match[1]) {
@@ -211,13 +212,13 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
                         // 更新编辑器中的链接
                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
                     } else {
-                        console.log('获取文件信息失败:', result);
+                        print('获取文件信息失败:', result);
                     }
                 } catch (error) {
-                    console.log('请求错误:', error);
+                    print('请求错误:', error);
                 }
             } else {
-                console.log('无法提取文件ID');
+                print('无法提取文件ID');
             }
         });
     } catch (error) {
@@ -357,7 +358,7 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
             // 使用 electron.webUtils.getPathForFile 获取文件路径
             const filePath = electron.webUtils.getPathForFile(file);
 
-            console.log('拖拽文件路径:', filePath);
+            print('拖拽文件路径:', filePath);
 
             if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
                 // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件

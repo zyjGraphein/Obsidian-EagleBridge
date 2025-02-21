@@ -1,5 +1,6 @@
 import { App, Modal, Notice, Setting, MarkdownView } from 'obsidian';
 import { MyPluginSettings } from './main';
+import { print, setDebug } from './main';
 
 export class EagleJumpModal extends Modal {
 	private onSubmit: (link: string) => void;
@@ -48,7 +49,7 @@ export class EagleJumpModal extends Modal {
 							// 如果是 eagle://item/ 或者图片链接格式，使用 Obsidian 的搜索功能
 							const itemId = eagleMatch ? eagleMatch[1] : (imageMatch ? imageMatch[1] : null);
 							if (itemId) {
-								console.log(`搜索 Obsidian 中的 ID: ${itemId}`);
+								print(`搜索 Obsidian 中的 ID: ${itemId}`);
 								// 使用类型断言来访问 commands
 								(this.app as any).commands.executeCommandById('app:open-search');
 								const searchLeaf = this.app.workspace.getLeavesOfType('search')[0];
@@ -63,7 +64,7 @@ export class EagleJumpModal extends Modal {
 							// 如果是 UUID 格式，构建 obsidian://adv-uri 链接
 							const obsidianStoreId = this.settings.obsidianStoreId;
 							const advUri = `obsidian://adv-uri?vault=${obsidianStoreId}&uid=${link}`;
-							console.log(`运行链接: ${advUri}`);
+							print(`运行链接: ${advUri}`);
 							window.open(advUri, '_blank');
 						} else {
 							new Notice('请输入有效的链接');
@@ -92,6 +93,6 @@ export class EagleJumpModal extends Modal {
 // 使用示例
 export function jumpModal(app: App, settings: MyPluginSettings) {
 	new EagleJumpModal(app, settings, (link) => {
-		console.log('用户输入的链接:', link);
+		print('用户输入的链接:', link);
 	}).open();
 }
