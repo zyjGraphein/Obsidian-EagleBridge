@@ -88,7 +88,7 @@ export default class MyPlugin extends Plugin {
 		);
 
 		// 在插件加载时设置 DEBUG 状态
-		console.log('Debug setting:', this.settings.debug);
+		// console.log('Debug setting:', this.settings.debug);
 		setDebug(this.settings.debug);
 
 		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
@@ -148,6 +148,7 @@ export default class MyPlugin extends Plugin {
 						break; // 找到后退出循环
 					}
 				}
+
 
 				if (closestUrl) {
 					url = closestUrl;
