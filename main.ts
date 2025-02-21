@@ -19,6 +19,7 @@ export interface MyPluginSettings {
 	imageSize: number | undefined;
 	websiteUpload: boolean;
 	// autoSyncTag: boolean;
+	libraryPaths: string[];
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -32,7 +33,8 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	obsidianStoreId: '',
 	imageSize: undefined,
 	websiteUpload: false,
-	// autoSyncTag: false
+	// autoSyncTag: false,
+	libraryPaths: [],
 }
 
 export default class MyPlugin extends Plugin {
@@ -223,6 +225,17 @@ export default class MyPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.updateLibraryPath(); // 更新Library Path
+	}
+
+	async updateLibraryPath() {
+		for (const path of this.settings.libraryPaths) {
+			if (existsSync(path)) { // 检查路径是否存在
+				this.settings.libraryPath = path;
+				break;
+			}
+		}
+		await this.saveSettings();
 	}
 
 	async saveSettings() {
@@ -579,6 +592,7 @@ export default class MyPlugin extends Plugin {
 					.setTitle(`Eagle url: ${url}`)
 					.onClick(() => {
 						navigator.clipboard.writeText(url);
+						window.open(url, '_self'); 
 						new Notice(`Copied: ${url}`);
 					})
 			);
@@ -827,15 +841,46 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Library Path')
-			.setDesc('Enter the library path for the server')
-			.addText(text => text
-				.setPlaceholder('Enter library path')
-				.setValue(this.plugin.settings.libraryPath)
-				.onChange(async (value) => {
-					this.plugin.settings.libraryPath = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName('Library Paths')
+			.setDesc(`Enter multiple library paths for the server. Current valid path: ${this.plugin.settings.libraryPath}`)
+			.addButton(button => {
+				button.setButtonText('+')
+					.setCta()
+					.onClick(() => {
+						this.plugin.settings.libraryPaths.push('');
+						this.plugin.saveSettings();
+						this.display(); // 重新渲染设置界面
+					});
+			});
+	
+			this.plugin.settings.libraryPaths.forEach((path, index) => {
+				new Setting(containerEl)
+					.addText(text => text
+						.setPlaceholder('Enter library path')
+						.setValue(path)
+						.onChange(async (value) => {
+							this.plugin.settings.libraryPaths[index] = value;
+							await this.plugin.saveSettings();
+							await this.plugin.updateLibraryPath(); // 更新Library Path
+							this.display(); // 重新渲染设置界面
+						}))
+					.addExtraButton(button => {
+						button.setIcon('cross')
+							.setTooltip('Remove')
+							.onClick(async () => {
+								this.plugin.settings.libraryPaths.splice(index, 1);
+								await this.plugin.saveSettings();
+								await this.plugin.updateLibraryPath(); // 更新Library Path
+								this.display(); // 重新渲染设置界面
+							});
+					});
+			});
+		// new Setting(containerEl)
+		// 	.setName('Current Library Path')
+		// 	.setDesc('The first valid library path')
+		// 	.addText(text => text
+		// 		.setValue(this.plugin.settings.libraryPath)
+		// 		.setDisabled(true)); // 禁用输入框，只显示有效路径
 
 		new Setting(containerEl)
 			.setName('Folder ID')
@@ -913,16 +958,7 @@ class SampleSettingTab extends PluginSettingTab {
 				});
 		});
 
-		// new Setting(containerEl)
-		// .setName('Auto-synchronize tag')
-		// .setDesc('Automatically synchronize the tag in the yaml area of the .md file to the tag of the eagle attachment when an image or attachment is added to the target .md file.(When Synchronizing advanced URI as a tag is turned on, the URI is automatically synchronized.)')
-		// .addToggle((toggle) => {
-		// 	toggle.setValue(this.plugin.settings.autoSyncTag)
-		// 		.onChange(async (value) => {
-		// 			this.plugin.settings.autoSyncTag = value;
-		// 			await this.plugin.saveSettings();
-		// 		});
-		// });
+
 
 		new Setting(containerEl)
 			.setName('Refresh Server')
@@ -934,6 +970,7 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 	}
 }
+
 
 // 定义一个新的 Modal 类
 class ModifyPropertiesModal extends Modal {
@@ -1059,6 +1096,7 @@ function createZoomMask(): HTMLDivElement {
 	return mask;
 }
 
+
 // 创建放大图片
 async function createZoomedImage(src: string, adaptive_ratio: number): Promise<{ zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number }> {
 	const zoomedImage = document.createElement('img');
@@ -1082,6 +1120,7 @@ async function createZoomedImage(src: string, adaptive_ratio: number): Promise<{
 		originalHeight
 	};
 }
+
 
 // 自适应图片大小
 function adaptivelyDisplayImage(zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, adaptive_ratio: number) {

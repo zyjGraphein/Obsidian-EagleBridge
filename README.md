@@ -94,6 +94,7 @@ If you have multiple URLs, you can also do:
 }
 ```
 
-## API Documentation
+## Support
+If you like this plugin and want to say thanks, you can buy me a coffee here!
+<img src="assets/coffee.png" width="400">
 
-See https://github.com/obsidianmd/obsidian-api
