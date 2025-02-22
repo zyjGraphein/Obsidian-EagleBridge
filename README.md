@@ -53,7 +53,7 @@ Visit the latest release page, download `main.js`, `manifest.json`, and `style.c
 ## Usage Guide
 
 - Text Tutorial ([中文](./doc/TutorialZH.md) / [EN](./doc/Tutorial.md))
-- Video Tutorial ([中文](https://www.bilibili.com))
+- Video Tutorial ([等待替换](https://www.bilibili.com))
 
 
 ## Development Guide

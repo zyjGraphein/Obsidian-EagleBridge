@@ -95,4 +95,4 @@
 
 如果你喜欢这个插件并想表示感谢，可以请我喝杯咖啡！
 
-<img src="../assets/coffee.png" width="=400">
+<img src="../assets/coffee.png" width="400">
