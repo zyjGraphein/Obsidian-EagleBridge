@@ -1,7 +1,7 @@
 {
 	"id": "EagleBridge",
 	"name": "EagleBridge",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"minAppVersion": "0.15.0",
 	"description": "EagleBridge is a plugin for Obsidian that allows you to connect to the Eagle.",
 	"author": "zyjGraphein",
@@ -9,3 +9,4 @@
 	"fundingUrl": "https://github.com/sponsors/zyjGraphein",
 	"isDesktopOnly": false
 }
+

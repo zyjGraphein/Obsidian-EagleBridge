@@ -23,6 +23,7 @@ export function setDebug(value: boolean) {
 	DEBUG = value;
 }
 
+
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 
