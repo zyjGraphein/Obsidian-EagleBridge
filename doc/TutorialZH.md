@@ -4,25 +4,37 @@
 由于 obsidian 和 eagle 可能通过同步，onedrive, 坚果云，硬盘等方式存在于不同的电脑上，为了确保能够有效链接，以及避免重复更改设置，该插件可以支持 eagle 的仓库多地址设置。
 例如在 A 电脑上，eagle 的Library 位于 H:\directory\example. Library，而在 B 电脑上，eagle 位于 E:\xxxx\example. Library，两个仓库的内容是一样的，但位于不同的地址上。
 均填写好后，当使用 A 电脑时，会自动将本地服务器映射在 D:\xxxx\eagle\仓库. Library，在使用 B 电脑时，会自动将本地服务器映射在 E:\xxxx\仓库. Library，更好的维护附件的链接。
+
 <img src="assets/setting.png" width="600">
+
 # 从 eagle 到obsidian
 当前支持复制和拖拽两种方式将附件从 eagle 移动到 obsidian,
+
 <img src="assets/fromeagle.gif" width="600">
+
 适应于所有格式的附件，例如 pdf, png, mp4，url等，
 其中图片类 png, jpg的文件，在复制后的格式为 ![image.png|700](http://localhost:6060/images/M7G6FALW9DRW5.info)，包含叹号，能够在 obsidian 中嵌入预览。
 而其他类型的文件显示为链接形式 [image.png|700](http://localhost:6060/images/M7G6FALW9DRW4.info) 。
 ## 检索 eagle 图片在 obsidian 中的位置
 通过在 eagle 中右键图片，复制-复制链接，随后打开 obsidian, ctrlp 加 P 使用 EagleBridge：eagle-jump-obsidian 功能（也可以绑定快捷键快速实现），粘贴对应的链接，找到图片。
+
 <img src="assets/searchname.gif" width="600">
+
 ## 另一种检索方式
 参考后文与 obsidian advanced URI 联动。
 # 从 obsidian 到eagle
 当前支持复制和拖拽两种方式将附件从本地直接导入 obsidian, 随后插件会自动执行上传 eagle。同样图片能够直接进行预览，有时会因为加载问题，导致图片不能立马显示，需要在链接后进行回车实现正常显示。
+
 <img src="assets/upload.gif" width="600">
+
 可以设置Eagle Folder lD选项，实现本地上传到指定的eagle文件夹。
+
 <img src="assets/eaglefolderid.gif" width="600">
+
 对于 url ，也可以进行上传管理，这是一个可选项能够在设置中打开或关闭。
+
 <img src="assets/url.gif" width="600">
+
 - 优势
 	- 上传 url 的好处在于能够将在线资源也在 obsidian 中进行管理，实现对所有类型的资源 all in one.
 - 缺点
@@ -31,18 +43,26 @@
 	- 此外也有可能用户不希望所有的 url 都被管理。
 - 补充
 	- 此外该开关只针对 url 从 obsidian 到eagle，也就是当 eagle 中的链接可以直接加载到obsidian，不受到该选项的影响。并且由于其已经加载过封面，使得整个过程更加快速流畅。更加推荐这种方式进行，关闭 url 上传，然后当有不想被eagle 管理的链接直接粘贴到 obsidian 中，想要被 eagle 管理的链接，从 eagle 加载到 obsidian。
+
 <img src="assets/urlfromeagle.gif" width="600">
+
 # 在 obsidain 中的操作
 ## 图片放大预览
 左键图片的右半部分实现放大预览
+
 <img src="assets/zoom.gif" width="600">
+
 ## 默认图片尺寸控制
 可以通过设置中的 image size 调整插入图片的默认尺寸。
+
 <img src="assets/imagesize.gif" width="600">
+
 ## 选项菜单
 对于 ![image.png|700](http://localhost:6060/images/M7G6FALW9DRW5.info) 图片格式能够通过右键持续按住打开选项菜单。
 对于 [image.png|700](http://localhost:6060/images/M7G6FALW9DRW5.info) 链接的格式，通过左键点击打开选项菜单。
+
 <img src="assets/menucall.gif" width="600">
+
 ### Open in obsidian
 该方式用 obsidian 默认的方式打开该附件，当启用 obsidian 的核心插件 web viewer 时，能够在 obsidian 中打开对应的网址。该网址能够预览图片，视频，音频，pdf，对于 web 不支持的格式例如 ppt, word 等打开网址后无法预览显示。
 ### Open in eagle
@@ -69,7 +89,9 @@
 快速删除该附件链接。
 ## 附件同步. Md 中的tags
 当文章写完，可以通过ctrl+p 搜索 EagleBridge: synchronized-page-tabs (或绑定快捷键) 实现附件的tag 与. Md 中的 tag 对齐。
+
 <img src="assets/synch.gif" width="600">
+
 # 与Obsidian advanced URI 联动
 ## 管理当前. Md 文档中所有的附件
 将 obsidian advanced URI 的 Vault 设置为 id,通过在 obsidian advanced URI 中获取当前仓库的 id 链接，例如obsidian://adv-uri?vault=adbba5532cfb5f8d&uid=c5b638b9-253b-4491-891d-3d3b3633e634中，仓库的 id 为 adbba5532cfb5f8d&uid，而具体的. Md 文件的 id 为c5b638b9-253b-4491-891d-3d3b3633e634，则可以将仓库 id 填写到设置栏 Obsidian store lD 中。
@@ -77,4 +99,5 @@
 在 eagle 中右键该 tag, 搜索包含标签的项目，即可在 eagle 中展示该. Md 中所有相关的附件。
 ## 检索 eagle 图片在 obsidian 中的位置（另一种方式）
 如果使用 obsidian advanced URI，并将 URI 作为图片 tag 进行了储存，可以复制图片 tag 中的. Md 的 id，然后在 EagleBridge：eagle-jump-obsidian 中粘贴 id，实现跳转对应的 md 文档。
+
 <img src="assets/searchid.gif" width="600">
