@@ -94,7 +94,7 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                 .setIcon("square-arrow-out-up-right")
                 .setTitle("Open in the default app")
                 .onClick(() => {
-                    const libraryPath = this.settings.libraryPath;
+                    const libraryPath = plugin.settings.libraryPath;
                     const localFilePath = path.join(
                         libraryPath,
                         "images",
@@ -128,7 +128,7 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                 .setIcon("external-link")
                 .setTitle("Open in other apps")
                 .onClick(() => {
-                    const libraryPath = this.settings.libraryPath;
+                    const libraryPath = plugin.settings.libraryPath;
                     const localFilePath = path.join(
                         libraryPath,
                         "images",
@@ -163,7 +163,7 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
             .setIcon("copy")
             .setTitle("Copy source file")
             .onClick(() => {
-                const libraryPath = this.settings.libraryPath;
+                const libraryPath = plugin.settings.libraryPath;
                 const localFilePath = path.join(
                     libraryPath,
                     "images",
