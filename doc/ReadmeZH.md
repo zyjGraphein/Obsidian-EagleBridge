@@ -91,7 +91,6 @@
 该项目依据 [GNU 通用公共许可证 v3 (GPL-3.0)](https://github.com/zyjGraphein/EagleBridge/blob/master/LICENSE) 授权。
 
 
-
 ## 支持
 
 如果你喜欢这个插件并想表示感谢，可以请我喝杯咖啡！
