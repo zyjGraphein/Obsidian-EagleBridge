@@ -1,8 +1,6 @@
 # Obsidian EagleBridge
 
-<div align="center">
-[中文](./doc/ReadmeZH.md) / EN
-</div>
+【[中文](./doc/ReadmeZH.md) / EN】
 
 This is a sample plugin for Obsidian, designed to integrate Obsidian with the Eagle software.
 
@@ -12,7 +10,7 @@ This is a sample plugin for Obsidian, designed to integrate Obsidian with the Ea
 
 This plugin includes the following functionalities:
 
-- Quick attachment navigation in Obsidian
+- Quick eagle attachment navigation in Obsidian
 - Tag synchronization
 - File viewing
 - Attachment management
@@ -34,11 +32,11 @@ You can start using the plugin once these configurations are complete.
 
 ### Load Attachments from Eagle
 
-<img src="assets/fromeagle.gif" width="600">
+<img src="assets/fromeagle.gif" width="800">
 
 ### Upload Local Attachments to Eagle via EagleBridge and View in Obsidian
 
-<img src="assets/upload.gif" width="600">
+<img src="assets/upload.gif" width="800">
 
 
 ## Installation Instructions
@@ -106,14 +104,3 @@ This project is licensed under the [GNU General Public License v3 (GPL-3.0)](htt
 If you appreciate this plugin and want to say thanks, you can buy me a coffee!
 
 <img src="assets/coffee.png" width="400">
-
-
-<!-- [![GitHub stars](https://img.shields.io/github/stars/RavenHogWarts/obsidian-ravenhogwarts-toolkit?style=flat&label=Stars)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/stargazers)
-[![Total Downloads](https://img.shields.io/github/downloads/RavenHogWarts/obsidian-ravenhogwarts-toolkit/total?style=flat&label=Total%20Downloads)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/releases)
-[![Latest Release Downloads](https://img.shields.io/github/downloads/RavenHogWarts/obsidian-ravenhogwarts-toolkit/latest/total?style=flat&label=Latest%20Release%20Downloads)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/releases/latest)
-[![Latest Pre-release Downloads](https://img.shields.io/github/downloads-pre/RavenHogWarts/obsidian-ravenhogwarts-toolkit/latest/total?style=flat&label=Latest%20Beta%20Downloads)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/releases)
-[![GitHub Release](https://img.shields.io/github/v/release/RavenHogWarts/obsidian-ravenhogwarts-toolkit?style=flat&label=Release)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/releases/latest)
-[![GitHub Release (Beta)](https://img.shields.io/github/v/release/RavenHogWarts/obsidian-ravenhogwarts-toolkit?include_prereleases&style=flat&label=Beta)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/releases)
-[![GitHub License](https://img.shields.io/github/license/RavenHogWarts/obsidian-ravenhogwarts-toolkit?style=flat&label=License)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/blob/master/LICENSE)
-[![GitHub Issues](https://img.shields.io/github/issues/RavenHogWarts/obsidian-ravenhogwarts-toolkit?style=flat&label=Issues)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/issues)
-[![GitHub Last Commit](https://img.shields.io/github/last-commit/RavenHogWarts/obsidian-ravenhogwarts-toolkit?style=flat&label=Last%20Commit)](https://github.com/RavenHogWarts/obsidian-ravenhogwarts-toolkit/commits/master) -->

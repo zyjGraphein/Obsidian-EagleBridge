@@ -87,6 +87,8 @@
 - **Copy markdown link**: 便于在其他文档中调用附件链接。
 - **Clear markdown link**: 快速删除附件链接。
 
+<img src="../assets/menu.png" width="300">
+
 ## 附件同步和`.md`中的标签
 
 文章撰写完成后，可通过```Ctrl+P```搜索```EagleBridge: synchronized-page-tabs```（或绑定快捷键）实现附件标签与`.md`中标签的一致。

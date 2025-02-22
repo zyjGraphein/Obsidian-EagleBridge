@@ -8,7 +8,7 @@
 
 本插件的功能包括：
 
-- 在 Obsidian 中快速跳转附件
+- 在 Obsidian 中快速跳转 eagle 附件
 - 标签同步
 - 文件查看
 - 附件管理
@@ -25,11 +25,11 @@
 
 ### 从 Eagle 中加载附件
 
-<img src="../assets/fromeagle.gif" width="600">
+<img src="../assets/fromeagle.gif" width="800">
 
 ### 从本地文件上传附件至 Eagle，并在 Obsidian 中查看
 
-<img src="../assets/upload.gif" width="600">
+<img src="../assets/upload.gif" width="800">
 
 
 ## 安装指南
@@ -95,4 +95,4 @@
 
 如果你喜欢这个插件并想表示感谢，可以请我喝杯咖啡！
 
-<img src="assets/coffee.png" width="400">
+<img src="../assets/coffee.png" width="=400">
