@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting, MarkdownView } from 'obsidian';
-import { MyPluginSettings } from './main';
+import { MyPluginSettings } from './setting';
 import { print, setDebug } from './main';
 
 export class EagleJumpModal extends Modal {
@@ -14,7 +14,7 @@ export class EagleJumpModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl('h3', { text: '请输入链接' });
+		contentEl.createEl('h3', { text: 'Please enter the link' });
 
 		let linkInput: HTMLInputElement;
 
@@ -49,7 +49,7 @@ export class EagleJumpModal extends Modal {
 							// 如果是 eagle://item/ 或者图片链接格式，使用 Obsidian 的搜索功能
 							const itemId = eagleMatch ? eagleMatch[1] : (imageMatch ? imageMatch[1] : null);
 							if (itemId) {
-								print(`搜索 Obsidian 中的 ID: ${itemId}`);
+								print(`Search ID in Obsidian: ${itemId}`);
 								// 使用类型断言来访问 commands
 								(this.app as any).commands.executeCommandById('app:open-search');
 								const searchLeaf = this.app.workspace.getLeavesOfType('search')[0];
@@ -58,21 +58,21 @@ export class EagleJumpModal extends Modal {
 									(searchView as any).setQuery(itemId);
 								}
 							} else {
-								new Notice('无法提取有效的 ID');
+								new Notice('Cannot extract a valid ID');
 							}
 						} else if (uuidMatch) {
 							// 如果是 UUID 格式，构建 obsidian://adv-uri 链接
 							const obsidianStoreId = this.settings.obsidianStoreId;
 							const advUri = `obsidian://adv-uri?vault=${obsidianStoreId}&uid=${link}`;
-							print(`运行链接: ${advUri}`);
+							print(`Run link: ${advUri}`);
 							window.open(advUri, '_blank');
 						} else {
-							new Notice('请输入有效的链接');
+							new Notice('Please enter a valid link');
 						}
 
 						this.close();
 					} else {
-						new Notice('请输入有效的链接');
+						new Notice('Please enter a valid link');
 					}
 				}));
 
@@ -93,6 +93,6 @@ export class EagleJumpModal extends Modal {
 // 使用示例
 export function jumpModal(app: App, settings: MyPluginSettings) {
 	new EagleJumpModal(app, settings, (link) => {
-		print('用户输入的链接:', link);
+		print(`User input link: ${link}`);
 	}).open();
 }

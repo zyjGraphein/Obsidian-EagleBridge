@@ -46,11 +46,11 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
             try {
                 const url = `${clipboardText}`;
                 await uploadByUrl(url, pluginInstance, editor);
-                new Notice('网址上传成功，请等待Eagle链接更新', 12000);
+                new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
             } catch (error) {
-                new Notice('网址上传失败');
+                new Notice('URL upload failed');
             }
-            print('剪贴板中有文本:', clipboardText);
+            print(`Clipboard has text: ${clipboardText}`);
         } else {
             return;
         }
@@ -62,7 +62,7 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
             // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
             try {
                 await uploadByClipboard(filePath, pluginInstance);
-                new Notice('文件上传成功');
+                new Notice('File uploaded successfully');
 
                 // 监听 URL 更新事件
                 urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
@@ -71,13 +71,13 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
 
                     if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
                         editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
-                        new Notice('Eagle链接已转换');
+                        new Notice('Eagle link converted');
                     } else {
                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
                     }
                 });
             } catch (error) {
-                new Notice('文件上传失败，检查Eagle是否已启动');
+                new Notice('File upload failed, check if Eagle is running');
             }
         } else {
             // 检查 filePath 中是否包含 'images\xxxxxx.info' 模式
@@ -97,9 +97,9 @@ export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: E
                     updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
                 }
                 editor.replaceSelection(updatedText);
-                new Notice('Eagle链接已转换');
+                new Notice('Eagle link converted');
             } else {
-                new Notice('非Eagle链接');
+                new Notice('Non-Eagle link');
             }
         }
     }
@@ -150,7 +150,7 @@ async function uploadByClipboard(filePath: string, pluginInstance: MyPlugin): Pr
     const response = await fetch("http://localhost:41595/api/item/addFromPath", requestOptions);
 
     if (!response.ok) {
-        throw new Error('上传失败');
+        throw new Error('Upload Failed');
     }
 
     // 不需要处理返回值，直接返回
@@ -181,7 +181,7 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
         if (!response.ok) {
             const errorResult = await response.json();
             console.error('Error response:', errorResult); // 输出错误响应
-            throw new Error('上传失败');
+            throw new Error('Upload Failed');
         }
 
         // 添加延时等待
@@ -213,13 +213,13 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
                         // 更新编辑器中的链接
                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
                     } else {
-                        print('获取文件信息失败:', result);
+                        print(`Failed to get file information: ${result}`);
                     }
                 } catch (error) {
-                    print('请求错误:', error);
+                    print(`Request error: ${error}`);
                 }
             } else {
-                print('无法提取文件ID');
+                print('Cannot extract file ID');
             }
         });
     } catch (error) {
@@ -359,13 +359,13 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
             // 使用 electron.webUtils.getPathForFile 获取文件路径
             const filePath = electron.webUtils.getPathForFile(file);
 
-            print('拖拽文件路径:', filePath);
+            print(`Drag file path: ${filePath}`);
 
             if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
                 // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
                 try {
                     await uploadByClipboard(filePath, pluginInstance);
-                    new Notice('文件上传成功');
+                    new Notice('File uploaded successfully');
 
                     // 监听 URL 更新事件
                     urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
@@ -374,13 +374,13 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
 
                         if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
                             editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
-                            new Notice('Eagle链接已转换');
+                            new Notice('Eagle link converted');
                         } else {
                             editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
                         }
                     });
                 } catch (error) {
-                    new Notice('文件上传失败，检查Eagle是否已启动');
+                    new Notice('File upload failed, check if Eagle is running');
                 }
             } else {
                 // 检查 filePath 中是否包含 'images\xxxxxx.info' 模式
@@ -398,9 +398,9 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
                         updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
                     }
                     editor.replaceSelection(updatedText);
-                    new Notice('Eagle链接已转换');
+                    new Notice('Eagle link converted');
                 } else {
-                    new Notice('非Eagle链接');
+                    new Notice('Non-Eagle link');
                 }
             }
         }

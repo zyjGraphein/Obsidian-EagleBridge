@@ -58,7 +58,7 @@ export default class MyPlugin extends Plugin {
 			const target = event.target as HTMLElement;
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!activeView) {
-				print('未找到活动视图');
+				print('Cannot find the active view');
 				return;
 			}
 
@@ -73,7 +73,7 @@ export default class MyPlugin extends Plugin {
 				const linkElement = target as HTMLAnchorElement;
 				if (linkElement && linkElement.href) {
 					url = linkElement.href;
-					print('预览模式下的链接:', url);
+					print(`Preview mode link: ${url}`);
 				}
 			} else {
 				if (!target.matches("span.external-link, .cm-link, a.cm-underline")) {
@@ -95,21 +95,21 @@ export default class MyPlugin extends Plugin {
 					const end = (match.index || 0) + match[0].length + 1;
 					if (cursorPos <= end) {
 						closestUrl = match[0];
-						print('光标位于链接区间:', i + 1);
+						print(`Cursor is in the link interval: ${i + 1}`);
 						break;
 					}
 				}
 
 				if (closestUrl) {
 					url = closestUrl;
-					print('编辑模式下的链接:', url);
+					print(`Edit mode link: ${url}`);
 				}
 			}
 
 			if (url && url.match(/^http:\/\/localhost:\d+\/images\/[^.]+\.info$/)) {
 				event.preventDefault();
 				event.stopPropagation();
-				print('阻止了链接:', url);
+				print(`Prevented link: ${url}`);
 				handleLinkClick(this, event, url);
 			} else {
 				return;

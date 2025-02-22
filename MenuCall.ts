@@ -103,22 +103,21 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                     );
         
                     // 打印路径用于调试
-                    new Notice(`文件的真实路径是: ${localFilePath}`);
-                    print(`文件的真实路径是: ${localFilePath}`);
+                    new Notice(`File real path: ${localFilePath}`);
+                    // print(`文件的真实路径是: ${localFilePath}`);
         
                     // 使用 spawn 调用 explorer.exe 打开文件
                     const child = spawn('explorer.exe', [localFilePath], { shell: true });
-
                     child.on('error', (error) => {
-                        console.error('Error opening file:', error);
-                        new Notice('无法打开文件，请检查路径是否正确');
+                        print('Error opening file:', error);
+                        new Notice('Cannot open the file, please check if the path is correct');
                     });
 
                     child.on('exit', (code) => {
                         if (code === 0) {
-                            print('文件已成功打开');
+                            print('The file has been opened successfully');
                         } else {
-                            console.error('文件未能正常打开，exit code:', code);
+                            print(`The file cannot be opened normally, exit code: ${code}`);
                         }
                     });
                 })
@@ -137,22 +136,22 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                     );
         
                     // 打印路径用于调试
-                    new Notice(`文件的真实路径是: ${localFilePath}`);
-                    print(`文件的真实路径是: ${localFilePath}`);
+                    new Notice(`File real path: ${localFilePath}`);
+                    // print(`文件的真实路径是: ${localFilePath}`);
         
                     // 使用 rundll32 调用系统的"打开方式"对话框
                     const child = spawn('rundll32', ['shell32.dll,OpenAs_RunDLL', localFilePath], { shell: true });
 
                     child.on('error', (error) => {
-                        console.error('Error opening file:', error);
-                        new Notice('无法打开文件，请检查路径是否正确');
+                        print('Error opening file:', error);
+                        new Notice('Cannot open the file, please check if the path is correct');
                     });
 
                     child.on('exit', (code) => {
                         if (code === 0) {
-                            print('文件已成功打开');
+                            print('The file has been opened successfully');
                         } else {
-                            console.error('文件未能正常打开，exit code:', code);
+                            print(`The file cannot be opened normally, exit code: ${code}`);
                         }
                     });
                 })
@@ -250,7 +249,7 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
             .onClick(async () => {
                 const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
                 if (!editor) {
-                    new Notice('未找到活动编辑器');
+                    new Notice('Cannot find the active editor');
                     return;
                 }
 
@@ -269,14 +268,14 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
                     if (match) {
                         const linkText = match[1]; // 获取完整的匹配文本
                         navigator.clipboard.writeText(linkText);
-                        new Notice('链接已复制');
+                        new Notice('Link copied');
                         linkFound = true;
                         break; // 找到并复制后退出循环
                     }
                 }
 
                 if (!linkFound) {
-                    new Notice('未找到链接');
+                    new Notice('Cannot find the link');
                 }
             })
     );
@@ -287,7 +286,7 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
             .onClick(() => {
                 const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
                 if (!editor) {
-                    new Notice('未找到活动编辑器');
+                    new Notice('Cannot find the active editor');
                     return;
                 }
 
@@ -307,14 +306,14 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
                         const from = { line: line, ch: match.index };
                         const to = { line: line, ch: match.index + match[0].length };
                         doc.replaceRange('', from, to);
-                        new Notice('链接已删除');
+                        new Notice('Link deleted');
                         linkFound = true;
                         break; // 找到并删除后退出循环
                     }
                 }
 
                 if (!linkFound) {
-                    new Notice('未找到链接');
+                    new Notice('Cannot find the link');
                 }
             })
     );

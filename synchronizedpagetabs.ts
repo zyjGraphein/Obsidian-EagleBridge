@@ -28,7 +28,7 @@ export async function syncTags(app: App, settings: MyPluginSettings) {
 
 			// 发送更新后的标签
 			await updateTagsForInfoFile(id, newTags);
-			new Notice('同步标签成功');
+			new Notice('Tags synced successfully');
 		}
 	} catch (error) {
 		print('Error syncing tags:', error);

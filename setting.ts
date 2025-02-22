@@ -170,7 +170,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 		.setName('Website upload')
-		.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively.')
+		.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively. 3.This option does not affect links dragged/copied from eagle to obsidian.')
 		.addToggle((toggle) => {
 			toggle.setValue(this.plugin.settings.websiteUpload)
 				.onChange(async (value) => {
