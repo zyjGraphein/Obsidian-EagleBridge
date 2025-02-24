@@ -208,8 +208,8 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
                     const result = await response.json();
 
                     if (result.status === "success" && result.data) {
-                        const fileName = result.data.name;
-
+                        const fileName = result.data.name + "." + result.data.ext;
+                        // const fileName = path.basename(filePath);
                         // 更新编辑器中的链接
                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
                     } else {

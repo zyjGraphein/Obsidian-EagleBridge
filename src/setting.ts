@@ -48,7 +48,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Port')
-			.setDesc('Enter the port number of the server, ranging from 1000 to 65535, and do not modify it after setting.')
+			.setDesc('Enter the port number of the server, ranging from 1000 to 9999, and do not modify it after setting.')
 			.addText(text => text
 				.setPlaceholder('Enter port number')
 				.setValue(this.plugin.settings.port.toString())

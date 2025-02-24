@@ -1,3 +1,4 @@
+//from  [AttachFlow](https://github.com/Yaozhuwa/AttachFlow)
 export async function handleImageClick(evt: MouseEvent, adaptiveRatio: number) {
 	const target = evt.target as HTMLElement;
 

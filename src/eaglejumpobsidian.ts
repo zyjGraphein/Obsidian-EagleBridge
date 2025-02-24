@@ -14,7 +14,7 @@ export class EagleJumpModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl('h3', { text: 'Please enter the link' });
+		contentEl.createEl('h3', { text: 'Please enter Page id or Eagle image link' });
 
 		let linkInput: HTMLInputElement;
 
@@ -27,18 +27,20 @@ export class EagleJumpModal extends Modal {
 
 		const buttonContainer = contentEl.createDiv();
 		buttonContainer.style.display = 'flex';
-		buttonContainer.style.gap = '10px'; // 设置按钮之间的间距
+		// buttonContainer.style.gap = '10px'; // 设置按钮之间的间距
+		buttonContainer.style.alignItems = 'end'; // 确保按钮在同一行上
+		buttonContainer.style.justifyContent = 'center'; // 确保按钮在同一行上
 
 		new Setting(buttonContainer)
 			.addButton(btn => btn
-				.setButtonText('Run jump')
+				.setButtonText('Jump')
 				.setCta()
 				.onClick(() => {
 					const link = linkInput.value.trim();
 					if (link) {
 						// 检查链接格式
 						const eaglePattern = /^eagle:\/\/item\/([A-Z0-9]+)$/;
-						const uuidPattern = /^[0-9a-fA-F-]{36}$/;
+						const uuidPattern = /^.+$/; // 匹配任意非空字符串
 						const imagePattern = /http:\/\/localhost:\d+\/images\/([A-Z0-9]+)\.info/;
 
 						const eagleMatch = link.match(eaglePattern);
@@ -50,12 +52,18 @@ export class EagleJumpModal extends Modal {
 							const itemId = eagleMatch ? eagleMatch[1] : (imageMatch ? imageMatch[1] : null);
 							if (itemId) {
 								print(`Search ID in Obsidian: ${itemId}`);
-								// 使用类型断言来访问 commands
-								(this.app as any).commands.executeCommandById('app:open-search');
-								const searchLeaf = this.app.workspace.getLeavesOfType('search')[0];
-								if (searchLeaf) {
-									const searchView = searchLeaf.view;
+								// 打开搜索面板
+								let searchLeaf = this.app.workspace.getLeavesOfType('search')[0];
+								if (!searchLeaf) {
+									searchLeaf = this.app.workspace.getLeaf(true); // 获取一个新的叶子
+									searchLeaf.setViewState({ type: 'search' }); // 设置视图类型为搜索
+								}
+								this.app.workspace.revealLeaf(searchLeaf);
+								const searchView = searchLeaf.view;
+								if (searchView && typeof (searchView as any).setQuery === 'function') {
 									(searchView as any).setQuery(itemId);
+								} else {
+									new Notice('Search view does not support setQuery');
 								}
 							} else {
 								new Notice('Cannot extract a valid ID');
@@ -69,7 +77,6 @@ export class EagleJumpModal extends Modal {
 						} else {
 							new Notice('Please enter a valid link');
 						}
-
 						this.close();
 					} else {
 						new Notice('Please enter a valid link');
