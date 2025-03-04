@@ -89,6 +89,13 @@ export function startServer(libraryPath: string, port: number) {
 
         const filePath = path.join(libraryPath, req.url || '');
 
+        // 解析 URL 查询参数
+        const url = new URL(req.url || '/', `http://${req.headers.host}`);
+        const noAutoplay = url.searchParams.has('noautoplay');
+        
+        // 将参数存储在请求对象中，以便后续处理时使用
+        (req as any).noAutoplay = noAutoplay;
+
         // 新增：提前验证请求路径是否在 images 目录下
         if (!filePath.startsWith(path.join(libraryPath, 'images') + path.sep)) {
             res.writeHead(404);

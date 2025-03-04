@@ -6,3 +6,176 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+/* Normal / default when pasting without any other content */
+img[src^="https:"]:has(+ .auto-embed-container:not(.auto-embed-hide-display)), 
+img[src^="http:"]:has(+ .auto-embed-container:not(.auto-embed-hide-display)),
+/* When there is other content on the same line as the embed. Not intended to use the plugin this way but in case the user does it, */
+.cm-line:has(+ .auto-embed-container:not(.auto-embed-hide-display)) img[src^="https:"],
+.cm-line:has(+ .auto-embed-container:not(.auto-embed-hide-display)) img[src^="http:"]
+{
+    display: none !important;
+}
+
+/* When the cursor is on the line with the embed */
+.auto-embed-container:not(.auto-embed-hide-display) + img[src^="https:"],
+.auto-embed-container:not(.auto-embed-hide-display) + img[src^="http:"]
+{
+    display: none !important;
+}
+
+/* When it's in a list */
+.HyperMD-list-line:has(+ .auto-embed-container:not(.auto-embed-hide-display)) img[src^="https:"], 
+.HyperMD-list-line:has(+ .auto-embed-container:not(.auto-embed-hide-display)) img[src^="http:"] 
+{
+    display: none !important;
+}
+
+/* Removes obsidian's embeds */
+/* iframe[src^="https://platform.twitter.com/embed"].external-embed,
+iframe[src^="https://www.youtube.com/embed"].external-embed 
+{
+    display: none !important;
+} */
+
+iframe.auto-embed {
+    max-width: 100%;
+    /* min-height: 500px; */
+}
+
+/* NOTE: Using 'auto-embed' as a prefix for everything to prevent other plugin's CSS from affecting this plugin */
+.auto-embed {
+    transition: opacity var(--auto-embed-anim-duration) linear,
+                height var(--auto-embed-anim-duration) ease-in-out;
+    height: 100%;
+}
+
+/* Hide visi */
+.auto-embed-hide-visibility {
+    /* display: none; */
+    opacity: 0;
+    /* height: 0; */
+    padding: 0;
+    visibility: hidden;
+}
+
+.auto-embed-hide-display {
+    display: none !important;
+}
+
+.auto-embed-container {
+    /* Obsidian durations: 
+        --anim-duration-moderate
+        --anim-duration-slow 
+    */
+    --auto-embed-anim-duration: var(--anim-duration-slow);
+
+    display: block;
+
+    max-width: 100%;
+    height: fit-content;
+    position: relative;
+
+    margin: 2px 0;
+    text-overflow: ellipsis;
+
+    transition: opacity var(--auto-embed-anim-duration),
+                height var(--auto-embed-anim-duration) ease-in-out;
+}
+
+.HyperMD-list-line {
+    &.HyperMD-list-line-1 + div.auto-embed-container {
+        margin-left: 1.4em !important;
+    }
+
+    &.HyperMD-list-line-2 + div.auto-embed-container {
+        margin-left: 3.65em !important;
+    }
+}
+
+.auto-embed-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    
+    padding: 0.9em 1.1em;
+    height: 100%;
+    width: 100%;
+    
+    border: var(--border-width) solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    
+    background-color: var(--background-secondary);
+    text-align: left;
+    overflow: auto;
+    
+    &.auto-embed-click-to-load {
+        cursor: pointer;
+    }
+
+    & p {
+        margin: 0;
+    }
+}
+
+/* Base snippet from: https://css-loaders.com/spinner/#20 */
+.auto-embed-loader {
+    display: inline-block;
+    height: 1em;
+    /* width: 50px; */
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 3px solid var(--interactive-accent);
+    animation:
+        l20-1 0.8s infinite linear alternate,
+        l20-2 1.6s infinite linear;
+}
+@keyframes l20-1{
+    0%    {clip-path: polygon(50% 50%,0       0,  50%   0%,  50%    0%, 50%    0%, 50%    0%, 50%    0% )}
+    12.5% {clip-path: polygon(50% 50%,0       0,  50%   0%,  100%   0%, 100%   0%, 100%   0%, 100%   0% )}
+    25%   {clip-path: polygon(50% 50%,0       0,  50%   0%,  100%   0%, 100% 100%, 100% 100%, 100% 100% )}
+    50%   {clip-path: polygon(50% 50%,0       0,  50%   0%,  100%   0%, 100% 100%, 50%  100%, 0%   100% )}
+    62.5% {clip-path: polygon(50% 50%,100%    0, 100%   0%,  100%   0%, 100% 100%, 50%  100%, 0%   100% )}
+    75%   {clip-path: polygon(50% 50%,100% 100%, 100% 100%,  100% 100%, 100% 100%, 50%  100%, 0%   100% )}
+    100%  {clip-path: polygon(50% 50%,50%  100%,  50% 100%,   50% 100%,  50% 100%, 50%  100%, 0%   100% )}
+}
+@keyframes l20-2{ 
+    0%    {transform:scaleY(1)  rotate(0deg)}
+    49.99%{transform:scaleY(1)  rotate(135deg)}
+    50%   {transform:scaleY(-1) rotate(0deg)}
+    100%  {transform:scaleY(-1) rotate(-135deg)}
+}
+
+.auto-embed-hide .auto-embed-loader {
+    display: none;
+}
+
+.auto-embed {
+    /* Times: 
+        --anim-duration-moderate 
+        --anim-duration-slow
+        */
+        
+    transition: opacity var(--auto-embed-anim-duration) linear,
+                height var(--auto-embed-anim-duration) ease-in-out;
+    
+    width: 100%;
+    height: 100%;
+}
+
+/* Handle bullet list */
+.HyperMD-list-line > .is-collapsed ~ .auto-embed-container{
+    display: none;
+}
+
+/* Default fallback */
+.default-fallback-embed-container {
+    display: inline-block;
+    height: 100%;
+    width: 100%;
+    text-align: center;
+    
+    &:has(>a) {
+        /* Padding for the link */
+        padding-bottom: calc(1em + var(--line-height-normal) * 1em);
+    }
+}

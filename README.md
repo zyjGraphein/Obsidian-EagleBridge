@@ -60,6 +60,10 @@ Visit the latest release page, download `main.js`, `manifest.json`, and `style.c
 - Text Tutorial ([中文](./doc/TutorialZH.md) / [EN](./doc/Tutorial.md))
 - Video Tutorial ([等待替换](https://www.bilibili.com))
 
+### Notes
+- When using the plugin, Eagle must be running in the background, and the open state should correspond to the repository at the specified path.
+- If Eagle is not running or is not in the target path repository, you can still view images, but the context menu functions and attachment uploads to Eagle will not work.
+- When exporting notes as a PDF, images will display correctly, but other links (URLs, PDFs, MP4s) will still be clickable. However, when shared with others (outside the local environment), these links may not open.
 
 ## Development Guide
 
@@ -75,6 +79,7 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 
 - [ ] Support embedded previews for various file formats (e.g., PDF, MP4, PSD, OBJ, etc.)
 - [ ] Add support for macOS.
+- [ ] When exporting, replace all attachment links and export all attachments to a folder.
 
 ## Known Limitations
 
