@@ -15,6 +15,7 @@ export interface MyPluginSettings {
 	websiteUpload: boolean;
 	libraryPaths: string[];
 	debug: boolean;
+	openInObsidian: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	websiteUpload: false,
 	libraryPaths: [],
 	debug: false,
+	openInObsidian: 'newPage',
 }
 
 
@@ -167,6 +169,19 @@ export class SampleSettingTab extends PluginSettingTab {
 					this.plugin.settings.obsidianStoreId = value;
 					await this.plugin.saveSettings();
 				}));
+		new Setting(containerEl)
+		.setName('Open in obsidian')
+		.setDesc('Default opening of attachments in obsidian')
+		.addDropdown(dropdown => {
+			dropdown.addOption('newPage', 'Open in new page')
+				.addOption('popup', 'Open in popup')
+				.addOption('rightPane', 'Open in right pane')
+				.setValue(this.plugin.settings.openInObsidian || 'newPage')
+				.onChange(async (value) => {
+					this.plugin.settings.openInObsidian = value;
+					await this.plugin.saveSettings();
+				});
+		});
 
 		new Setting(containerEl)
 		.setName('Website upload')

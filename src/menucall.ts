@@ -72,11 +72,40 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
             item
                 .setIcon("file-symlink")
                 .setTitle("Open in obsidian")
-                .onClick((event: MouseEvent) => {
-                    // console.log(oburl);
-                    window.open(oburl, '_blank');
+                .onClick(async (event: MouseEvent) => {
+                    // 根据设置决定如何打开链接
+                    const openMethod = plugin.settings.openInObsidian || 'newPage';
+                    
+                    if (openMethod === 'newPage') {
+                        // 在新页面打开（默认行为）
+                        window.open(oburl, '_blank');
+                    } else if (openMethod === 'popup') {
+                        // 使用 Obsidian 的独立窗口打开
+                        const leaf = plugin.app.workspace.getLeaf('window');
+                        await leaf.setViewState({
+                            type: 'webviewer',
+                            state: {
+                                url: oburl,
+                                navigate: true,
+                            },
+                            active: true,
+                        });
+                    } else if (openMethod === 'rightPane') {
+                        // 在右侧新栏中打开
+                        const leaf = plugin.app.workspace.getLeaf('split', 'vertical');
+                        await leaf.setViewState({
+                            type: 'webviewer',
+                            state: {
+                                url: oburl,
+                                navigate: true,
+                            },
+                            active: true,
+                        });
+                    }
                 })
         );
+        
+        
         
         menu.addItem((item: MenuItem) =>
             item

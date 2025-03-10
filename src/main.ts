@@ -9,7 +9,7 @@ import { existsSync } from 'fs';
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
 import { handleLinkClick, eagleImageContextMenuCall, registerEscapeButton, addEagleImageMenuSourceMode, addEagleImageMenuPreviewMode, fetchImageInfo } from './menucall';
-import { isLinkToImage, isURL, isLocalHostLink, isAltTextImage } from './embed';
+import { isAltTextImage, isURL, isLocalHostLink} from './embed';
 import { embedManager } from './embed';
 import { embedField } from './embed-state-field';
 import { Extension } from "@codemirror/state";
@@ -43,7 +43,7 @@ export default class MyPlugin extends Plugin {
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			const images = el.querySelectorAll('img');
 			images.forEach((image) => {
-				if (isURL(image.src) && embedManager.shouldEmbed(image.src)) {
+				if (embedManager.shouldEmbed(image.src)) {
 					print(`MarkdownPostProcessor 找到可嵌入图像: ${image.src}`);
 					this.handleImage(image);
 				}
@@ -278,7 +278,6 @@ export default class MyPlugin extends Plugin {
 			// print(`创建嵌入内容: ${src}`);
 			const embedResult = embedManager.create(src);
 			const container = embedResult.containerEl;
-			const iframe = embedResult.iframeEl;
 			
 			if (!img.parentElement) {
 				// print("错误: 图像没有父元素");
@@ -288,18 +287,6 @@ export default class MyPlugin extends Plugin {
 			// 使用替换方法
 			img.parentElement.replaceChild(container, img);
 			
-			if (iframe) {
-				// 设置iframe事件处理
-				iframe.onerror = () => {
-					// print("嵌入加载失败: 显示原始图像");
-					container.classList.add("auto-embed-hide-display");
-				};
-				
-				iframe.onload = () => {
-					// print("嵌入加载成功");
-					container.classList.remove("auto-embed-hide-display");
-				};
-			}
 			
 			return container;
 		} catch (error) {

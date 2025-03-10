@@ -11,15 +11,6 @@ export function isURL(str: string): boolean {
     return url.protocol === "http:" || url.protocol === "https:";
 }
 
-// 检查链接是否指向图像文件
-export function isLinkToImage(str: string): boolean {
-    try {
-        const url = new URL(str);
-        return /\.(jpg|jpeg|png|webp|avif|gif|svg)$/i.test(url.pathname);
-    } catch {
-        return false;
-    }
-}
 
 // 检查是否为本地主机链接
 export function isLocalHostLink(str: string): boolean {
@@ -31,10 +22,6 @@ export function isLocalHostLink(str: string): boolean {
     }
 }
 
-// 检查是否为Eagle信息链接
-export function isEagleInfoLink(str: string): boolean {
-    return /http:\/\/localhost:\d+\/images\/[^\/]+\.info/i.test(str);
-}
 
 // 检查Alt文本是否表示图片类型（增强版）
 export function isAltTextImage(alt: string): boolean {

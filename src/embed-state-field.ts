@@ -3,7 +3,7 @@ import { Extension, RangeSetBuilder, StateField, Transaction } from "@codemirror
 import { Decoration, DecorationSet, EditorView } from "@codemirror/view";
 import { editorLivePreviewField } from "obsidian";
 import { EmbedWidget } from "./embed-widget";
-import { isURL, isLocalHostLink, embedManager, isLinkToImage } from "./embed";
+import { isURL, isLocalHostLink, embedManager, isAltTextImage } from "./embed";
 
 // 使用与参考代码完全一致的正则表达式
 const formattingImageMarkerRegex = /formatting_formatting-image_image_image-marker(?:_list-\d*)?$/;
@@ -15,12 +15,12 @@ function debugLog(message: string, ...args: any[]) {
 }
 
 // 检查Alt文本是否表示图片类型（与embed.ts保持一致）
-function isAltTextImage(alt: string): boolean {
-    // 首先处理可能包含尺寸的情况，如 "image.png|700"
-    const mainPart = alt.split('|')[0].trim();
-    debugLog(`检查alt文本: ${alt}, 主要部分: ${mainPart}`);
-    return /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)$/i.test(mainPart);
-}
+// function isAltTextImage(alt: string): boolean {
+//     // 首先处理可能包含尺寸的情况，如 "image.png|700"
+//     const mainPart = alt.split('|')[0].trim();
+//     debugLog(`检查alt文本: ${alt}, 主要部分: ${mainPart}`);
+//     return /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)$/i.test(mainPart);
+// }
 
 // 定义编辑器状态字段
 export const embedField = StateField.define<DecorationSet>({
@@ -84,7 +84,7 @@ export const embedField = StateField.define<DecorationSet>({
                     }
                     
                     // 检查是否为本地链接且不是图片链接
-                    if (!isLocalHostLink(url) || isLinkToImage(url)) {
+                    if (!isLocalHostLink(url) || isAltTextImage(url)) {
                         // print(`不是本地链接或是图片链接: ${url}`);
                         return;
                     }
