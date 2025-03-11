@@ -242,10 +242,10 @@ export default class MyPlugin extends Plugin {
 		this.register(
 			onElement(
 				document,
-				"mousedown",
+				"contextmenu",
 				"img",
 				eagleImageContextMenuCall.bind(this),
-				// { capture: true }
+				{ capture: true }
 			)
 		);
 	}

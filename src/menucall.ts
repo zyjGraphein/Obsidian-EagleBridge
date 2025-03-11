@@ -25,8 +25,8 @@ export function eagleImageContextMenuCall(this: MyPlugin, event: MouseEvent) {
 	const inCallout: boolean = img.closest('.callout') != null;
 	if (img.id == 'af-zoomed-image') return;
 	if (!img.src.startsWith('http')) return;
-	if (event.button != 2) return;
-	event.preventDefault();
+    event.preventDefault();
+	event.stopPropagation();
 	this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.blur();
 	img.classList.remove('image-ready-click-view', 'image-ready-resize');
 	const url = img.src;
