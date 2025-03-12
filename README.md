@@ -58,7 +58,8 @@ Visit the latest release page, download `main.js`, `manifest.json`, and `style.c
 ## Usage Guide
 
 - Text Tutorial ([中文](./doc/TutorialZH.md) / [EN](./doc/Tutorial.md))
-- Video Tutorial ([等待替换](https://www.bilibili.com))
+- Video Tutorial ([Obsidian EagleBridge -bilibili](https://www.bilibili.com/video/BV1voQsYaE5W/?share_source=copy_web&vd_source=491bedf306ddb53a3baa114332c02b93))
+
 
 ### Notes
 - When using the plugin, Eagle must be running in the background, and the open state should correspond to the repository at the specified path.
