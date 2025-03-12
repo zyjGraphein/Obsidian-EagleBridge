@@ -77,8 +77,9 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 
 ## To-Do List
 
-- [ ] Support embedded previews for various file formats (e.g., PDF, MP4, PSD, OBJ, etc.)
+- [x] Support embedded previews for various file formats (e.g., PDF, MP4, PSD, OBJ, etc.)
 - [ ] Add support for macOS.
+- [ ] Support updating position when dragging.
 - [ ] When exporting, replace all attachment links and export all attachments to a folder.
 
 ## Known Limitations
@@ -98,12 +99,15 @@ If you are considering developing a large feature, please contact me first so we
 
 
 ## Credits
+This plugin also utilizes API calls from [eagle](https://api.eagle.cool/) to enable viewing, editing, and uploading of Eagle content.
 
-The right-click functionality and image zooming in this plugin draw inspiration from [AttachFlow](https://github.com/Yaozhuwa/AttachFlow)Additionally, it is also inspired by some features from [obsidian-auto-link-title](https://github.com/zolrath/obsidian-auto-link-title) and [obsidian-image-auto-upload-plugin](https://github.com/renmu123/obsidian-image-auto-upload-plugin). 
+The right-click functionality and image zooming in this plugin draw inspiration from [AttachFlow](https://github.com/Yaozhuwa/AttachFlow)
+
+Video and PDF external link embedding previews are inspired by the corresponding features of [auto-embed](https://github.com/GnoxNahte/obsidian-auto-embed).
+
+Additionally, it is also inspired by some features from[PicGo+Eagle+Python](https://zhuanlan.zhihu.com/p/695526765), [obsidian-auto-link-title](https://github.com/zolrath/obsidian-auto-link-title) and [obsidian-image-auto-upload-plugin](https://github.com/renmu123/obsidian-image-auto-upload-plugin). 
 
 Additionally, support from the Obsidian forum ([get-the-source-path-when-drag-and-drop-or-copying-a-file-image-from-outside](https://forum.obsidian.md/t/how-to-get-the-source-path-when-drag-and-drop-or-copying-a-file-image-from-outside/96437)) helped in implementing the ability to capture file sources via copying or dragging.
-
-This plugin also utilizes API calls from [eagle](https://api.eagle.cool/) to enable viewing, editing, and uploading of Eagle content.
 
 
 ## License

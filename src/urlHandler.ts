@@ -349,8 +349,10 @@ async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor
 
 // 添加拖动事件处理
 export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port: number, pluginInstance: MyPlugin) {
+    // 阻止默认行为，这样我们可以自己处理拖放
     dropEvent.preventDefault();
-
+    
+    
     // 检查拖拽事件中的文件
     if (dropEvent.dataTransfer?.files.length) {
         const files = dropEvent.dataTransfer.files;
@@ -372,12 +374,19 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
                         const fileName = path.basename(filePath);
                         const fileExt = path.extname(filePath).toLowerCase();
 
+                        // 准备插入的文本
+                        let insertText;
                         if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
-                            editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
+                            insertText = `![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`;
                             new Notice('Eagle link converted');
                         } else {
-                            editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
+                            insertText = `[${fileName}](${latestDirUrl})`;
                         }
+                        
+                        // 在拖放位置插入内容
+                        // 注意：Obsidian会自动处理拖放位置，我们只需要使用replaceSelection
+                        editor.replaceSelection(insertText);
+                        new Notice('Eagle链接已转换');
                     });
                 } catch (error) {
                     new Notice('File upload failed, check if Eagle is running');
@@ -398,9 +407,9 @@ export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port
                         updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
                     }
                     editor.replaceSelection(updatedText);
-                    new Notice('Eagle link converted');
+                    new Notice('Eagle链接已转换');
                 } else {
-                    new Notice('Non-Eagle link');
+                    new Notice('非Eagle链接');
                 }
             }
         }
