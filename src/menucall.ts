@@ -2,10 +2,64 @@ import { Menu, MenuItem, MarkdownView, Notice, Modal, App, Setting } from 'obsid
 import MyPlugin from './main';
 import * as path from 'path';
 import { onElement } from './onElement';
-import { print, setDebug } from './main';
-import { exec, spawn, execSync } from 'child_process';
+import { print } from './main';
+import { exec, execSync, spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { EditorView} from '@codemirror/view';
+
+const electron = require('electron');
+const shell = electron.shell as {
+    openExternal: (target: string) => Promise<void>;
+    openPath: (target: string) => Promise<string>;
+    showItemInFolder: (fullPath: string) => void;
+};
+
+function getRevealMenuTitle(): string {
+    if (process.platform === 'darwin') {
+        return 'Reveal in Finder';
+    }
+
+    if (process.platform === 'win32') {
+        return 'Show in File Explorer';
+    }
+
+    return 'Reveal in file manager';
+}
+
+function getOtherAppsMenuTitle(): string {
+    return process.platform === 'win32' ? 'Open in other apps' : getRevealMenuTitle();
+}
+
+async function openFileInDefaultApp(filePath: string): Promise<void> {
+    const errorMessage = await shell.openPath(filePath);
+    if (errorMessage) {
+        throw new Error(errorMessage);
+    }
+}
+
+function revealFileInSystemBrowser(filePath: string): void {
+    shell.showItemInFolder(filePath);
+}
+
+function openFileInOtherApps(filePath: string): Promise<void> {
+    if (process.platform !== 'win32') {
+        revealFileInSystemBrowser(filePath);
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const child = spawn('rundll32', ['shell32.dll,OpenAs_RunDLL', filePath], { shell: true });
+
+        child.on('error', reject);
+        child.on('exit', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`EXIT_CODE_${String(code)}`));
+            }
+        });
+    });
+}
 
 export function handleLinkClick(plugin: MyPlugin, event: MouseEvent, url: string) {
 	const menu = new Menu();
@@ -112,10 +166,10 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
             item
                 .setIcon("file-symlink")
                 .setTitle("Open in eagle")
-                .onClick(() => {
+                .onClick(async () => {
                     const eagleLink = `eagle://item/${id}`;
                     navigator.clipboard.writeText(eagleLink);
-                    window.open(eagleLink, '_self'); // 直接运行跳转到 eagle:// 链接
+                    await shell.openExternal(eagleLink);
                 })
         );
 
@@ -123,7 +177,7 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
             item
                 .setIcon("square-arrow-out-up-right")
                 .setTitle("Open in the default app")
-                .onClick(() => {
+                .onClick(async () => {
                     const libraryPath = plugin.settings.libraryPath;
                     const localFilePath = path.join(
                         libraryPath,
@@ -136,27 +190,19 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                     new Notice(`File real path: ${localFilePath}`);
                     // print(`文件的真实路径是: ${localFilePath}`);
         
-                    // 使用 spawn 调用 explorer.exe 打开文件
-                    const child = spawn('explorer.exe', [localFilePath], { shell: true });
-                    child.on('error', (error) => {
+                    try {
+                        await openFileInDefaultApp(localFilePath);
+                    } catch (error) {
                         print('Error opening file:', error);
                         new Notice('Cannot open the file, please check if the path is correct');
-                    });
-
-                    child.on('exit', (code) => {
-                        if (code === 0) {
-                            print('The file has been opened successfully');
-                        } else {
-                            print(`The file cannot be opened normally, exit code: ${code}`);
-                        }
-                    });
+                    }
                 })
         );
         menu.addItem((item: MenuItem) =>
             item
                 .setIcon("external-link")
-                .setTitle("Open in other apps")
-                .onClick(() => {
+                .setTitle(getOtherAppsMenuTitle())
+                .onClick(async () => {
                     const libraryPath = plugin.settings.libraryPath;
                     const localFilePath = path.join(
                         libraryPath,
@@ -169,21 +215,12 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                     new Notice(`File real path: ${localFilePath}`);
                     // print(`文件的真实路径是: ${localFilePath}`);
         
-                    // 使用 rundll32 调用系统的"打开方式"对话框
-                    const child = spawn('rundll32', ['shell32.dll,OpenAs_RunDLL', localFilePath], { shell: true });
-
-                    child.on('error', (error) => {
+                    try {
+                        await openFileInOtherApps(localFilePath);
+                    } catch (error) {
                         print('Error opening file:', error);
                         new Notice('Cannot open the file, please check if the path is correct');
-                    });
-
-                    child.on('exit', (code) => {
-                        if (code === 0) {
-                            print('The file has been opened successfully');
-                        } else {
-                            print(`The file cannot be opened normally, exit code: ${code}`);
-                        }
-                    });
+                    }
                 })
         );	
         // 复制源文件

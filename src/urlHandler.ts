@@ -5,6 +5,7 @@ import * as path from 'path';
 import { urlEmitter } from './server';
 import type MyPlugin from './main';
 import { print } from './main';
+import { getEagleLibraryItemPath, isPathInsideDirectory } from './eaglePaths';
 
 const electron = require('electron');
 const IMAGE_EXTENSIONS = new Set([
@@ -31,6 +32,7 @@ const VIDEO_EXTENSIONS = new Set([
     '.mpg',
     '.3gp',
 ]);
+
 
 export type UploadSurface = 'markdown' | 'canvas';
 type UploadContentType = 'image' | 'video' | 'website' | 'other';
@@ -168,13 +170,13 @@ function waitForNextUrlUpdate(timeoutMs = 15000): Promise<string> {
 }
 
 function buildLibraryLink(filePath: string, pluginInstance: MyPlugin): ResolvedEagleLink {
-    const match = filePath.match(/images\\[^\\]+\.info/i);
-    if (!match) {
+    const itemPath = getEagleLibraryItemPath(filePath, pluginInstance.settings.libraryPath);
+    if (!itemPath) {
         throw new Error('NON_EAGLE_FILE');
     }
 
     return {
-        url: `http://localhost:${pluginInstance.settings.port}/${match[0].replace(/\\/g, '/')}`,
+        url: `http://localhost:${pluginInstance.settings.port}/${itemPath}`,
         fileName: path.basename(filePath),
         isImage: isImageExtension(filePath),
     };
@@ -232,7 +234,7 @@ export async function getTransferFilePath(file: File): Promise<string> {
 }
 
 export async function resolveFilePathToEagleLink(filePath: string, pluginInstance: MyPlugin): Promise<ResolvedEagleLink> {
-    if (filePath.startsWith(pluginInstance.settings.libraryPath)) {
+    if (isPathInsideDirectory(filePath, pluginInstance.settings.libraryPath)) {
         return buildLibraryLink(filePath, pluginInstance);
     }
 

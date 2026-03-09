@@ -39,9 +39,9 @@ export class EagleJumpModal extends Modal {
 					const link = linkInput.value.trim();
 					if (link) {
 						// 检查链接格式
-						const eaglePattern = /^eagle:\/\/item\/([A-Z0-9]+)$/;
+						const eaglePattern = /^eagle:\/\/item\/([^/\s]+)$/i;
 						const uuidPattern = /^.+$/; // 匹配任意非空字符串
-						const imagePattern = /http:\/\/localhost:\d+\/images\/([A-Z0-9]+)\.info/;
+						const imagePattern = /http:\/\/localhost:\d+\/images\/([^/\s]+)\.info/i;
 
 						const eagleMatch = link.match(eaglePattern);
 						const uuidMatch = link.match(uuidPattern);

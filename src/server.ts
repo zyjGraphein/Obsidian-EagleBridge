@@ -4,6 +4,7 @@ import * as path from 'path';
 import chokidar from 'chokidar';
 import { EventEmitter } from 'events';
 import { print, setDebug } from './main';
+import { isPathInsideDirectory } from './eaglePaths';
 
 let server: http.Server;
 let isServerRunning = false;
@@ -366,7 +367,7 @@ export function startServer(libraryPath: string, port: number) {
         }
 
         // 新增：提前验证请求路径是否在 images 目录下
-        if (!filePath.startsWith(path.join(libraryPath, 'images') + path.sep)) {
+        if (!isPathInsideDirectory(filePath, path.join(libraryPath, 'images'))) {
             res.writeHead(404);
             res.end();
             return;

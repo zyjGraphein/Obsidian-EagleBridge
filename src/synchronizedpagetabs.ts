@@ -36,6 +36,7 @@ export async function syncTags(app: App, settings: MyPluginSettings) {
 	}
 }
 
+
 async function fetchTagsForInfoFile(id: string): Promise<string[]> {
 	const requestOptions: RequestInit = {
 		method: 'GET',
@@ -88,7 +89,7 @@ async function getInfoFileIdsFromCurrentFile(app: App): Promise<string[]> {
 	}
 
 	const fileContent = await app.vault.read(activeFile);
-	const regex = /http:\/\/localhost:\d+\/images\/([A-Z0-9]+)\.info/g;
+	const regex = /http:\/\/localhost:\d+\/images\/([^/\s]+)\.info/gi;
 	let match;
 	const ids = new Set<string>();
 
