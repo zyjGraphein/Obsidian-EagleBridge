@@ -12,6 +12,8 @@ export interface EagleUploadSettings {
 	other: boolean;
 }
 
+export type AttachmentTagSyncMode = 'off' | 'appendPageTagsToEagle' | 'importEagleTagsToYaml';
+
 export interface MyPluginSettings {
 	mySetting: string;
 	port: number;
@@ -20,6 +22,8 @@ export interface MyPluginSettings {
 	clickView: boolean;
 	adaptiveRatio: number;
 	advancedID: boolean;
+	attachmentTagSyncMode: AttachmentTagSyncMode;
+	exactSyncPageTagsToEagle: boolean;
 	obsidianStoreId: string;
 	imageSize: number | undefined;
 	upload: EagleUploadSettings;
@@ -46,6 +50,8 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	clickView: false,
 	adaptiveRatio: 0.8,
 	advancedID: false,
+	attachmentTagSyncMode: 'off',
+	exactSyncPageTagsToEagle: false,
 	obsidianStoreId: '',
 	imageSize: undefined,
 	upload: { ...DEFAULT_UPLOAD_SETTINGS },
@@ -57,6 +63,13 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 type LegacyUploadSettings = Partial<EagleUploadSettings> & {
 	pdf?: boolean;
 	website?: boolean;
+};
+
+type LegacyTagSyncSettings = {
+	attachmentTagSyncMode?: AttachmentTagSyncMode;
+	exactSyncPageTagsToEagle?: boolean;
+	autoSyncPageTags?: boolean;
+	importEagleTagsToYaml?: boolean;
 };
 
 export function normalizeUploadSettings(data: { upload?: LegacyUploadSettings; websiteUpload?: boolean } | null | undefined): EagleUploadSettings {
@@ -78,6 +91,35 @@ export function normalizeUploadSettings(data: { upload?: LegacyUploadSettings; w
 				? true
 				: DEFAULT_UPLOAD_SETTINGS.other,
 	};
+}
+
+export function normalizeAttachmentTagSyncMode(data: LegacyTagSyncSettings | null | undefined): AttachmentTagSyncMode {
+	const savedMode = data?.attachmentTagSyncMode;
+	if (savedMode === 'off' || savedMode === 'appendPageTagsToEagle' || savedMode === 'importEagleTagsToYaml') {
+		return savedMode;
+	}
+
+	if (data?.importEagleTagsToYaml) {
+		return 'importEagleTagsToYaml';
+	}
+
+	if (data?.autoSyncPageTags) {
+		return 'appendPageTagsToEagle';
+	}
+
+	return 'off';
+}
+
+export function isAppendPageTagsMode(settings: MyPluginSettings): boolean {
+	return settings.attachmentTagSyncMode === 'appendPageTagsToEagle';
+}
+
+export function isImportEagleTagsMode(settings: MyPluginSettings): boolean {
+	return settings.attachmentTagSyncMode === 'importEagleTagsToYaml';
+}
+
+export function shouldReplacePageTagsInEagle(settings: MyPluginSettings): boolean {
+	return isAppendPageTagsMode(settings) && settings.exactSyncPageTagsToEagle;
 }
 
 
@@ -204,6 +246,56 @@ export class SampleSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     });
             });
+
+		const attachmentTagSyncPanel = containerEl.createDiv({ cls: 'eagle-tag-sync-panel' });
+		attachmentTagSyncPanel.createEl('h3', { text: 'Attachment tag sync' });
+		attachmentTagSyncPanel.createEl('p', {
+			text: 'Choose a single direction for automatic tag updates when Eagle attachments enter the page.',
+			cls: 'eagle-tag-sync-panel-desc',
+		});
+
+		new Setting(attachmentTagSyncPanel)
+			.setName('Sync direction')
+			.setDesc('Use one mode at a time to avoid recursive tag changes across the page.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('off', 'Off')
+					.addOption('appendPageTagsToEagle', 'Append page tags to Eagle')
+					.addOption('importEagleTagsToYaml', 'Import Eagle tags to YAML')
+					.setValue(this.plugin.settings.attachmentTagSyncMode)
+					.onChange(async (value: AttachmentTagSyncMode) => {
+						this.plugin.settings.attachmentTagSyncMode = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshAutoTagSyncState();
+						this.display();
+					});
+			});
+
+		if (this.plugin.settings.attachmentTagSyncMode === 'appendPageTagsToEagle') {
+			const appendModeCard = attachmentTagSyncPanel.createDiv({ cls: 'eagle-tag-sync-subcard' });
+			new Setting(appendModeCard)
+				.setName('Exact align tags')
+				.setDesc('Replace Eagle item tags with the current page tags instead of only appending missing tags.')
+				.addToggle((toggle) => {
+					toggle.setValue(this.plugin.settings.exactSyncPageTagsToEagle)
+						.onChange(async (value) => {
+							this.plugin.settings.exactSyncPageTagsToEagle = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshAutoTagSyncState();
+							this.display();
+						});
+				});
+		}
+
+		const attachmentTagSyncHint = attachmentTagSyncPanel.createDiv({ cls: 'eagle-tag-sync-hint' });
+		const activeModeText = this.plugin.settings.attachmentTagSyncMode === 'appendPageTagsToEagle'
+			? this.plugin.settings.exactSyncPageTagsToEagle
+				? 'Exact align mode: Eagle items in the page are overwritten to match the current page tags.'
+				: 'Append mode: when page tags or Eagle links change, Eagle items in the page only receive missing page tags.'
+			: this.plugin.settings.attachmentTagSyncMode === 'importEagleTagsToYaml'
+				? 'Import mode: when a new Eagle attachment is added to the page, its Eagle tags are merged into YAML tags.'
+				: 'Off mode: page tags and Eagle tags stay independent unless you run the manual append command.';
+		attachmentTagSyncHint.setText(activeModeText);
 
 		new Setting(containerEl)
 			.setName('Obsidian store ID')

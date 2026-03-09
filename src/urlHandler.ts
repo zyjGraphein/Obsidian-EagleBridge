@@ -6,6 +6,7 @@ import { urlEmitter } from './server';
 import type MyPlugin from './main';
 import { print } from './main';
 import { getEagleLibraryItemPath, isPathInsideDirectory } from './eaglePaths';
+import { getCurrentPageTags } from './synchronizedpagetabs';
 
 const electron = require('electron');
 const IMAGE_EXTENSIONS = new Set([
@@ -334,10 +335,12 @@ export async function handlePasteEvent(
 
 async function uploadByClipboard(filePath: string, pluginInstance: MyPlugin): Promise<void> {
     const folderId = pluginInstance.settings.folderId || '';
+    const tags = getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
     const data = {
         path: filePath,
         name: path.basename(filePath),
         folderId,
+        tags,
     };
 
     const response = await fetch('http://localhost:41595/api/item/addFromPath', {
@@ -353,9 +356,11 @@ async function uploadByClipboard(filePath: string, pluginInstance: MyPlugin): Pr
 
 async function uploadByUrl(url: string, pluginInstance: MyPlugin): Promise<void> {
     const folderId = pluginInstance.settings.folderId || '';
+    const tags = getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
     const data = {
         url,
         folderId,
+        tags,
     };
 
     print('Request data:', data);

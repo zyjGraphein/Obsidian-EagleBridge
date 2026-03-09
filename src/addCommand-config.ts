@@ -1,13 +1,13 @@
 import MyPlugin from './main';
-import { syncTags } from "./synchronizedpagetabs";
+import { syncCurrentPageTags } from "./synchronizedpagetabs";
 import { jumpModal } from "./eaglejumpobsidian";
 
 export const addCommandSynchronizedPageTabs = (myPlugin: MyPlugin) => {
 	myPlugin.addCommand({
 		id: "synchronized-page-tabs",
-		name: "synchronized-page-tabs",
+		name: "Append current page tags to Eagle",
 		callback: async () => {
-			syncTags(myPlugin.app, myPlugin.settings);
+			await syncCurrentPageTags(myPlugin.app, myPlugin.settings, { notify: true });
 		},
 	});
 };

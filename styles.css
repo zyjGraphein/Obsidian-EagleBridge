@@ -76,6 +76,63 @@ If your plugin does not need CSS, delete this file.
     border-top: 1px solid var(--background-modifier-border);
 }
 
+.eagle-tag-sync-panel {
+    margin-top: 1rem;
+    padding: 18px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--text-accent) 10%, transparent), transparent 32%),
+        linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+}
+
+.eagle-tag-sync-panel h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+}
+
+.eagle-tag-sync-panel-desc {
+    margin: 0 0 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.eagle-tag-sync-panel .setting-item {
+    margin: 0;
+    padding: 14px 0;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.eagle-tag-sync-panel .setting-item:first-of-type {
+    border-top: none;
+    padding-top: 0;
+}
+
+.eagle-tag-sync-subcard {
+    margin-top: 10px;
+    padding: 0 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--background-primary-alt) 84%, transparent);
+}
+
+.eagle-tag-sync-subcard .setting-item {
+    padding: 14px 0;
+}
+
+.eagle-tag-sync-subcard .setting-item:first-of-type {
+    border-top: none;
+}
+
+.eagle-tag-sync-hint {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--background-primary-alt);
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
 @media (max-width: 900px) {
     .eagle-upload-grid {
         grid-template-columns: 1fr;
