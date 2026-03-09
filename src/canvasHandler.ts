@@ -7,6 +7,8 @@ import {
     type ResolvedEagleLink,
     resolveFilePathToEagleLink,
     resolveUrlToEagleLink,
+    shouldUploadExternalUrl,
+    shouldUploadTransferFiles,
 } from './urlHandler';
 
 const DEFAULT_LINK_WIDTH = 420;
@@ -187,20 +189,24 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
 
     const clipboardData = event.clipboardData;
     const clipboardFiles = getTransferFiles(clipboardData);
-    const hasClipboardFiles = clipboardFiles.length > 0;
+    const shouldHandleFiles = shouldUploadTransferFiles(clipboardFiles, plugin, 'canvas');
     const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
     const shouldHandleUrl = Boolean(
         clipboardText &&
         /^https?:\/\/[^\s]+$/.test(clipboardText) &&
         !clipboardText.startsWith('http://localhost') &&
-        plugin.settings.websiteUpload
+        shouldUploadExternalUrl(plugin, 'canvas')
     );
 
-    if (hasClipboardFiles || shouldHandleUrl) {
+    if (shouldHandleFiles || shouldHandleUrl) {
         consumeHandledEvent(event);
     }
 
-    if (hasClipboardFiles) {
+    if (clipboardFiles.length > 0 && !shouldHandleFiles) {
+        return;
+    }
+
+    if (shouldHandleFiles) {
         for (const file of clipboardFiles) {
             try {
                 const filePath = await getTransferFilePath(file);
@@ -219,7 +225,7 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
         return;
     }
 
-    if (!plugin.settings.websiteUpload) {
+    if (!shouldUploadExternalUrl(plugin, 'canvas')) {
         return;
     }
 
@@ -242,10 +248,15 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
         return;
     }
 
-    if (event.dataTransfer?.files.length) {
+    const transferFiles = Array.from(event.dataTransfer?.files ?? []);
+    if (transferFiles.length > 0) {
+        if (!shouldUploadTransferFiles(transferFiles, plugin, 'canvas')) {
+            return;
+        }
+
         consumeHandledEvent(event);
 
-        for (const file of Array.from(event.dataTransfer.files)) {
+        for (const file of transferFiles) {
             try {
                 const filePath = await getTransferFilePath(file);
                 const resolvedLink = await resolveFilePathToEagleLink(filePath, plugin);
@@ -260,7 +271,7 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
     }
 
     const droppedUrl = getDroppedUrl(event);
-    if (!droppedUrl || !plugin.settings.websiteUpload) {
+    if (!droppedUrl || !shouldUploadExternalUrl(plugin, 'canvas')) {
         return;
     }
 

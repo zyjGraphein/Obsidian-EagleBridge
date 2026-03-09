@@ -18,6 +18,22 @@ const IMAGE_EXTENSIONS = new Set([
     '.bmp',
     '.ico',
 ]);
+const VIDEO_EXTENSIONS = new Set([
+    '.mp4',
+    '.mov',
+    '.avi',
+    '.mkv',
+    '.webm',
+    '.m4v',
+    '.wmv',
+    '.flv',
+    '.mpeg',
+    '.mpg',
+    '.3gp',
+]);
+
+export type UploadSurface = 'markdown' | 'canvas';
+type UploadContentType = 'image' | 'video' | 'website' | 'other';
 
 export interface ResolvedEagleLink {
     url: string;
@@ -64,6 +80,64 @@ function isImageExtension(filePathOrExt: string): boolean {
         ? filePathOrExt.toLowerCase()
         : path.extname(filePathOrExt).toLowerCase();
     return IMAGE_EXTENSIONS.has(normalizedExt);
+}
+
+function getUploadContentType(fileName: string): UploadContentType {
+    const normalizedExt = path.extname(fileName).toLowerCase();
+    if (IMAGE_EXTENSIONS.has(normalizedExt)) {
+        return 'image';
+    }
+
+    if (VIDEO_EXTENSIONS.has(normalizedExt)) {
+        return 'video';
+    }
+
+    return 'other';
+}
+
+function isUploadSurfaceEnabled(surface: UploadSurface, pluginInstance: MyPlugin): boolean {
+    if (!pluginInstance.settings.upload.enabled) {
+        return false;
+    }
+
+    switch (surface) {
+        case 'markdown':
+            return pluginInstance.settings.upload.markdown;
+        case 'canvas':
+            return pluginInstance.settings.upload.canvas;
+        default:
+            return false;
+    }
+}
+
+function isUploadContentEnabled(targetType: UploadContentType, pluginInstance: MyPlugin): boolean {
+    switch (targetType) {
+        case 'image':
+            return pluginInstance.settings.upload.image;
+        case 'video':
+            return pluginInstance.settings.upload.video;
+        case 'website':
+            return pluginInstance.settings.upload.website;
+        case 'other':
+            return pluginInstance.settings.upload.other;
+        default:
+            return false;
+    }
+}
+
+function shouldUploadTransferFile(file: File, pluginInstance: MyPlugin): boolean {
+    return isUploadContentEnabled(getUploadContentType(file.name), pluginInstance);
+}
+
+export function shouldUploadTransferFiles(files: File[], pluginInstance: MyPlugin, surface: UploadSurface): boolean {
+    return isUploadSurfaceEnabled(surface, pluginInstance)
+        && files.length > 0
+        && files.every((file) => shouldUploadTransferFile(file, pluginInstance));
+}
+
+export function shouldUploadExternalUrl(pluginInstance: MyPlugin, surface: UploadSurface): boolean {
+    return isUploadSurfaceEnabled(surface, pluginInstance)
+        && isUploadContentEnabled('website', pluginInstance);
 }
 
 function delay(ms: number): Promise<void> {
@@ -199,26 +273,30 @@ export async function handlePasteEvent(
     const clipboardData = clipboardEvent.clipboardData;
     const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
     const clipboardFiles = getTransferFiles(clipboardData);
-    const hasClipboardFiles = clipboardFiles.length > 0;
+    const shouldHandleFiles = shouldUploadTransferFiles(clipboardFiles, pluginInstance, 'markdown');
     const shouldHandleUrl = Boolean(
         clipboardText &&
         isHttpUrl(clipboardText) &&
         !clipboardText.startsWith('http://localhost') &&
-        pluginInstance.settings.websiteUpload
+        shouldUploadExternalUrl(pluginInstance, 'markdown')
     );
 
-    if (hasClipboardFiles || shouldHandleUrl) {
+    if (shouldHandleFiles || shouldHandleUrl) {
         consumeHandledEvent(clipboardEvent);
     }
 
     let filePath = '';
 
-    if (hasClipboardFiles) {
+    if (clipboardFiles.length > 0 && !shouldHandleFiles) {
+        return;
+    }
+
+    if (shouldHandleFiles) {
         filePath = await getTransferFilePath(clipboardFiles[0]);
     }
 
     if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
-        if (!pluginInstance.settings.websiteUpload) {
+        if (!shouldUploadExternalUrl(pluginInstance, 'markdown')) {
             return;
         }
 
@@ -307,13 +385,18 @@ export async function handleDropEvent(
         return;
     }
 
-    if (!dropEvent.dataTransfer?.files.length) {
+    const transferFiles = Array.from(dropEvent.dataTransfer?.files ?? []);
+    if (transferFiles.length === 0) {
+        return;
+    }
+
+    if (!shouldUploadTransferFiles(transferFiles, pluginInstance, 'markdown')) {
         return;
     }
 
     consumeHandledEvent(dropEvent);
 
-    for (const file of Array.from(dropEvent.dataTransfer.files)) {
+    for (const file of transferFiles) {
         try {
             const filePath = await getTransferFilePath(file);
             print(`Drag file path: ${filePath}`);

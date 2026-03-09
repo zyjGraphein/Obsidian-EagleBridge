@@ -6,7 +6,7 @@ import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
 import { addCommandSynchronizedPageTabs,addCommandEagleJump } from "./addCommand-config";
 import { existsSync } from 'fs';
-import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab } from './setting';
+import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, normalizeUploadSettings } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
 import { handleLinkClick, eagleImageContextMenuCall, registerEscapeButton, addEagleImageMenuSourceMode, addEagleImageMenuPreviewMode, fetchImageInfo } from './menucall';
 import { isAltTextImage, isURL, isLocalHostLink} from './embed';
@@ -222,7 +222,13 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loadedSettings = await this.loadData();
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...loadedSettings,
+			upload: normalizeUploadSettings(loadedSettings),
+		};
+		delete (this.settings as MyPluginSettings & { websiteUpload?: boolean }).websiteUpload;
 		this.updateLibraryPath(); // 更新Library Path
 	}
 

@@ -2,6 +2,16 @@ import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import MyPlugin from './main';
 import { startServer, refreshServer, stopServer } from './server';
 
+export interface EagleUploadSettings {
+	enabled: boolean;
+	markdown: boolean;
+	canvas: boolean;
+	image: boolean;
+	video: boolean;
+	website: boolean;
+	other: boolean;
+}
+
 export interface MyPluginSettings {
 	mySetting: string;
 	port: number;
@@ -12,11 +22,21 @@ export interface MyPluginSettings {
 	advancedID: boolean;
 	obsidianStoreId: string;
 	imageSize: number | undefined;
-	websiteUpload: boolean;
+	upload: EagleUploadSettings;
 	libraryPaths: string[];
 	debug: boolean;
 	openInObsidian: string;
 }
+
+export const DEFAULT_UPLOAD_SETTINGS: EagleUploadSettings = {
+	enabled: true,
+	markdown: true,
+	canvas: true,
+	image: true,
+	video: true,
+	website: false,
+	other: true,
+};
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default',
@@ -28,10 +48,36 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	advancedID: false,
 	obsidianStoreId: '',
 	imageSize: undefined,
-	websiteUpload: false,
+	upload: { ...DEFAULT_UPLOAD_SETTINGS },
 	libraryPaths: [],
 	debug: false,
 	openInObsidian: 'newPage',
+}
+
+type LegacyUploadSettings = Partial<EagleUploadSettings> & {
+	pdf?: boolean;
+	website?: boolean;
+};
+
+export function normalizeUploadSettings(data: { upload?: LegacyUploadSettings; websiteUpload?: boolean } | null | undefined): EagleUploadSettings {
+	const upload = data?.upload ?? {};
+	const legacyWebsiteUpload = typeof data?.websiteUpload === 'boolean' ? data.websiteUpload : undefined;
+	const hasLegacyOtherEnabled = upload.pdf === true || typeof upload.other === 'boolean';
+
+	return {
+		...DEFAULT_UPLOAD_SETTINGS,
+		...upload,
+		markdown: typeof upload.markdown === 'boolean' ? upload.markdown : DEFAULT_UPLOAD_SETTINGS.markdown,
+		canvas: typeof upload.canvas === 'boolean' ? upload.canvas : DEFAULT_UPLOAD_SETTINGS.canvas,
+		website: typeof upload.website === 'boolean'
+			? upload.website
+			: legacyWebsiteUpload ?? DEFAULT_UPLOAD_SETTINGS.website,
+		other: typeof upload.other === 'boolean'
+			? upload.other
+			: hasLegacyOtherEnabled
+				? true
+				: DEFAULT_UPLOAD_SETTINGS.other,
+	};
 }
 
 
@@ -183,16 +229,104 @@ export class SampleSettingTab extends PluginSettingTab {
 				});
 		});
 
-		new Setting(containerEl)
-		.setName('Website upload')
-		.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively. 3.This option does not affect links dragged/copied from eagle to obsidian.')
-		.addToggle((toggle) => {
-			toggle.setValue(this.plugin.settings.websiteUpload)
-				.onChange(async (value) => {
-					this.plugin.settings.websiteUpload = value;
-					await this.plugin.saveSettings();
-				});
+		const uploadSettingsContainer = containerEl.createDiv({ cls: 'eagle-upload-panel' });
+
+		new Setting(uploadSettingsContainer)
+			.setName('Attachment upload')
+			.setDesc('Master switch for uploading dragged or pasted external content to Eagle.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.enabled = value;
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		const uploadTypesDetails = uploadSettingsContainer.createEl('details', { cls: 'eagle-upload-details' });
+		uploadTypesDetails.open = this.plugin.settings.upload.enabled;
+		uploadTypesDetails.createEl('summary', { text: 'Configure upload rules' });
+		const uploadGrid = uploadTypesDetails.createDiv({ cls: 'eagle-upload-grid' });
+		const uploadTargetCard = uploadGrid.createDiv({ cls: 'eagle-upload-card' });
+		const uploadFormatCard = uploadGrid.createDiv({ cls: 'eagle-upload-card' });
+
+		uploadTargetCard.createEl('h3', { text: 'Obsidian type' });
+		uploadTargetCard.createEl('p', {
+			text: 'Choose which Obsidian document types are allowed to trigger Eagle upload.',
+			cls: 'eagle-upload-card-desc',
 		});
+
+		new Setting(uploadTargetCard)
+			.setName('Markdown upload')
+			.setDesc('Handle paste and drag events inside Markdown editors.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.markdown)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.markdown = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(uploadTargetCard)
+			.setName('Canvas upload')
+			.setDesc('Handle paste and drag events inside Canvas views.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.canvas)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.canvas = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		uploadFormatCard.createEl('h3', { text: 'Content type' });
+		uploadFormatCard.createEl('p', {
+			text: 'Choose which dragged or pasted content types should be uploaded to Eagle.',
+			cls: 'eagle-upload-card-desc',
+		});
+
+		new Setting(uploadFormatCard)
+			.setName('Image upload')
+			.setDesc('Upload image files to Eagle.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.image)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.image = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(uploadFormatCard)
+			.setName('Video upload')
+			.setDesc('Upload video files to Eagle.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.video)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.video = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(uploadFormatCard)
+			.setName('Website upload')
+			.setDesc('URL uploaded to eagle. note: 1. eagle will automatically get the cover, with a certain delay. 2. when exporting notes to share, may not be able to jump effectively. 3. This option does not affect links dragged/copied from eagle to obsidian. Large delay may occur, not recommended to enable.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.website)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.website = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(uploadFormatCard)
+			.setName('Other upload')
+			.setDesc('Upload PDF and other non-image, non-video files to Eagle.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.upload.other)
+					.onChange(async (value) => {
+						this.plugin.settings.upload.other = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		new Setting(containerEl)
 			.setName('Refresh Server')
