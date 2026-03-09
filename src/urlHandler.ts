@@ -1,417 +1,334 @@
-import { Editor , Notice , FileSystemAdapter} from 'obsidian';
+import { Editor, Notice } from 'obsidian';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
-import { getLatestDirUrl, urlEmitter } from './server';
-import MyPlugin from './main';
-import { print, setDebug } from './main';
-const electron = require('electron')
-const clipboard = electron.clipboard;
+import * as path from 'path';
+import { urlEmitter } from './server';
+import type MyPlugin from './main';
+import { print } from './main';
 
-// import { clipboard } from 'electron';
-// const { remote } = require('electron');  
-// declare const app: any; // 声明全局 app 变量
+const electron = require('electron');
+const IMAGE_EXTENSIONS = new Set([
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.webp',
+    '.svg',
+    '.avif',
+    '.bmp',
+    '.ico',
+]);
 
-// 处理粘贴事件的函数
-export async function handlePasteEvent(clipboardEvent: ClipboardEvent, editor: Editor, port: number, pluginInstance: MyPlugin) {
-    // 获取剪贴板中的纯文本内容
-    let clipboardText = clipboardEvent.clipboardData?.getData('text/plain');
-    let filePath = "";
-
-    if (clipboardEvent.clipboardData?.files.length) {
-        clipboardEvent.preventDefault();
-        const file = clipboardEvent.clipboardData.files[0];
-        filePath = electron.webUtils.getPathForFile(file);
-
-        if (!filePath) { // 如果 filePath 不存在
-            const tempDir = os.tmpdir(); // 使用 os.tmpdir() 获取临时目录
-            const uploadDir = path.join(tempDir, 'obsidian-uploads');
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir);
-            }
-
-            // 将文件保存到临时目录
-            filePath = path.join(uploadDir, file.name);
-            // console.log('File path2:', filePath); // 在控制台打印文件路径
-            const buffer = await file.arrayBuffer();
-            fs.writeFileSync(filePath, Buffer.from(buffer));
-        }
-    }
-    
-    if (clipboardText && /^https?:\/\/[^\s]+$/.test(clipboardText) && !clipboardText.startsWith('http://localhost')) {
-        // 如果文本内容为 URL 且不以 http://localhost 开头
-
-        if (pluginInstance.settings.websiteUpload) {
-            clipboardEvent.preventDefault();
-            try {
-                const url = `${clipboardText}`;
-                await uploadByUrl(url, pluginInstance, editor);
-                new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
-            } catch (error) {
-                new Notice('URL upload failed');
-            }
-            print(`Clipboard has text: ${clipboardText}`);
-        } else {
-            return;
-        }
-    } else if (filePath) {
-        // 如果 filePath 存在
-        clipboardEvent.preventDefault();
-        if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
-            print('filePath1:', filePath);
-            // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
-            try {
-                await uploadByClipboard(filePath, pluginInstance);
-                new Notice('File uploaded successfully');
-
-                // 监听 URL 更新事件
-                urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
-                    const fileName = path.basename(filePath);
-                    const fileExt = path.extname(filePath).toLowerCase();
-
-                    if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
-                        editor.replaceSelection(`![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`);
-                        new Notice('Eagle link converted');
-                    } else {
-                        editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
-                    }
-                });
-            } catch (error) {
-                new Notice('File upload failed, check if Eagle is running');
-            }
-        } else {
-            // 检查 filePath 中是否包含 'images\xxxxxx.info' 模式
-            const match = filePath.match(/images\\[^\\]+\.info/);
-            if (match) {
-                const fileName = path.basename(filePath);
-                const fileExt = path.extname(filePath).toLowerCase();
-
-                let updatedText;
-                const urlPath = match[0].replace(/\\/g, '/'); // 将反斜杠替换为正斜杠
-
-                if (['.png', '.jpg', '.jpeg'].includes(fileExt)) {
-                    clipboardEvent.preventDefault();
-                    updatedText = `![${fileName}|${pluginInstance.settings.imageSize}](http://localhost:${port}/${urlPath})`;
-                } else {
-                    clipboardEvent.preventDefault();
-                    updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
-                }
-                editor.replaceSelection(updatedText);
-                new Notice('Eagle link converted');
-            } else {
-                new Notice('Non-Eagle link');
-            }
-        }
-    }
-}
-        // 检查剪贴板内容是否为Eagle链接
-        // if (/eagle:\/\/item\/(\w+)/.test(clipboardText)) {
-        //     clipboard.preventDefault();
-        //     const updatedText = clipboardText.replace(/eagle:\/\/item\/(\w+)/g, (match, p1) => {
-        //         return `![](http://localhost:${port}/images/${p1}.info)`;
-        //     });
-        //     editor.replaceSelection(updatedText);
-        //     new Notice('Eagle链接已转换');
-        // }
-        // 如果是非局域网的URL
-        
-        // 获取剪贴板内容
-        // else if (os === "win32") {
-        //     const rawFilePath = clipboard.readBuffer("FileNameW");
-        //     filePath = rawFilePath.toString('ucs2').replace(new RegExp(String.fromCharCode(0), "g"), "");
-        // } else if (os === "darwin") {
-        //     filePath = clipboard.read("public.file-url").replace("file://", "");
-        // } else {
-        //     filePath = ""; // Linux 或其他系统的处理
-        // }
-        // 检查剪贴板内容
-        
-// 使用API上传剪贴板中的图片
-async function uploadByClipboard(filePath: string, pluginInstance: MyPlugin): Promise<void> {
-    // 从插件实例的 settings 中获取 folderId
-    const folderId = pluginInstance.settings.folderId || "";
-
-    // 构建请求数据
-    const data = {
-        "path": filePath, // 直接使用传入的文件路径
-        "name": path.basename(filePath), // 从路径中提取文件名
-        "folderId": folderId,
-        // "token": "58f7ecda-250f-4043-8ae0-cd11d673f680" // 请替换为实际的API令牌
-    };
-
-    // 构建请求选项
-    const requestOptions = {
-        method: 'POST',
-        body: JSON.stringify(data),
-        redirect: 'follow' as RequestRedirect
-    };
-
-    // 发送请求到指定的API端点
-    const response = await fetch("http://localhost:41595/api/item/addFromPath", requestOptions);
-
-    if (!response.ok) {
-        throw new Error('Upload Failed');
-    }
-
-    // 不需要处理返回值，直接返回
-    return; // 或者 return null; 如果需要返回一个值
+export interface ResolvedEagleLink {
+    url: string;
+    fileName: string;
+    isImage: boolean;
 }
 
+function consumeHandledEvent(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+}
 
-async function uploadByUrl(url: string, pluginInstance: MyPlugin, editor: Editor): Promise<void> {
-    const folderId = pluginInstance.settings.folderId || "";
-    const data = {
-        "url": url,
-        // "name": "アルトリア･キャスター",
-        // "tags": ["FGO", "アルトリア・キャスター"],
-        "folderId": folderId
+export function getTransferFiles(dataTransfer: DataTransfer | null | undefined): File[] {
+    if (!dataTransfer) {
+        return [];
+    }
+
+    const files = Array.from(dataTransfer.files ?? []);
+    const itemFiles = Array.from(dataTransfer.items ?? [])
+        .filter((item) => item.kind === 'file')
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+
+    const mergedFiles = [...files, ...itemFiles];
+    const dedupedFiles = new Map<string, File>();
+
+    for (const file of mergedFiles) {
+        const key = `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
+        if (!dedupedFiles.has(key)) {
+            dedupedFiles.set(key, file);
+        }
+    }
+
+    return Array.from(dedupedFiles.values());
+}
+
+function isHttpUrl(value: string): boolean {
+    return /^https?:\/\/[^\s]+$/.test(value);
+}
+
+function isImageExtension(filePathOrExt: string): boolean {
+    const normalizedExt = filePathOrExt.startsWith('.')
+        ? filePathOrExt.toLowerCase()
+        : path.extname(filePathOrExt).toLowerCase();
+    return IMAGE_EXTENSIONS.has(normalizedExt);
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
+function waitForNextUrlUpdate(timeoutMs = 15000): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const onUpdate = (latestDirUrl: string) => {
+            clearTimeout(timer);
+            resolve(latestDirUrl);
+        };
+
+        const timer = setTimeout(() => {
+            urlEmitter.removeListener('urlUpdated', onUpdate);
+            reject(new Error('URL_UPDATE_TIMEOUT'));
+        }, timeoutMs);
+
+        urlEmitter.once('urlUpdated', onUpdate);
+    });
+}
+
+function buildLibraryLink(filePath: string, pluginInstance: MyPlugin): ResolvedEagleLink {
+    const match = filePath.match(/images\\[^\\]+\.info/i);
+    if (!match) {
+        throw new Error('NON_EAGLE_FILE');
+    }
+
+    return {
+        url: `http://localhost:${pluginInstance.settings.port}/${match[0].replace(/\\/g, '/')}`,
+        fileName: path.basename(filePath),
+        isImage: isImageExtension(filePath),
     };
+}
 
-    print('Request data:', data); // 调试输出请求数据
+async function fetchUploadedItemFileName(latestDirUrl: string): Promise<string | null> {
+    const match = latestDirUrl.match(/images\/([^/]+)\.info/);
+    if (!match?.[1]) {
+        return null;
+    }
 
-    const requestOptions = {
-        method: 'POST',
-        body: JSON.stringify(data),
-        redirect: 'follow' as RequestRedirect
-    };
+    await delay(2000);
 
     try {
-        const response = await fetch("http://localhost:41595/api/item/addBookmark", requestOptions);
+        const response = await fetch(`http://localhost:41595/api/item/info?id=${match[1]}`, {
+            method: 'GET',
+            redirect: 'follow' as RequestRedirect,
+        });
+        const result = await response.json();
 
-        if (!response.ok) {
-            const errorResult = await response.json();
-            console.error('Error response:', errorResult); // 输出错误响应
-            throw new Error('Upload Failed');
+        if (result.status === 'success' && result.data) {
+            return `${result.data.name}.${result.data.ext}`;
+        }
+    } catch (error) {
+        print(`Request error: ${toErrorMessage(error)}`);
+    }
+
+    return null;
+}
+
+export function createMarkdownLink(link: ResolvedEagleLink, imageSize: number | undefined): string {
+    if (!link.isImage) {
+        return `[${link.fileName}](${link.url})`;
+    }
+
+    const sizeSuffix = imageSize ? `|${imageSize}` : '';
+    return `![${link.fileName}${sizeSuffix}](${link.url})`;
+}
+
+export async function getTransferFilePath(file: File): Promise<string> {
+    let filePath = electron.webUtils.getPathForFile(file);
+    if (filePath) {
+        return filePath;
+    }
+
+    const uploadDir = path.join(os.tmpdir(), 'obsidian-uploads');
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    filePath = path.join(uploadDir, file.name);
+    const buffer = await file.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(buffer));
+    return filePath;
+}
+
+export async function resolveFilePathToEagleLink(filePath: string, pluginInstance: MyPlugin): Promise<ResolvedEagleLink> {
+    if (filePath.startsWith(pluginInstance.settings.libraryPath)) {
+        return buildLibraryLink(filePath, pluginInstance);
+    }
+
+    const nextUrlPromise = waitForNextUrlUpdate();
+    await uploadByClipboard(filePath, pluginInstance);
+    const latestDirUrl = await nextUrlPromise;
+
+    return {
+        url: latestDirUrl,
+        fileName: path.basename(filePath),
+        isImage: isImageExtension(filePath),
+    };
+}
+
+export async function resolveUrlToEagleLink(url: string, pluginInstance: MyPlugin): Promise<ResolvedEagleLink> {
+    const nextUrlPromise = waitForNextUrlUpdate();
+    await uploadByUrl(url, pluginInstance);
+    const latestDirUrl = await nextUrlPromise;
+    const fileName = await fetchUploadedItemFileName(latestDirUrl);
+
+    return {
+        url: latestDirUrl,
+        fileName: fileName || url,
+        isImage: fileName ? isImageExtension(fileName) : false,
+    };
+}
+
+export async function handlePasteEvent(
+    clipboardEvent: ClipboardEvent,
+    editor: Editor,
+    _port: number,
+    pluginInstance: MyPlugin,
+) {
+    if (clipboardEvent.defaultPrevented) {
+        return;
+    }
+
+    const clipboardData = clipboardEvent.clipboardData;
+    const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
+    const clipboardFiles = getTransferFiles(clipboardData);
+    const hasClipboardFiles = clipboardFiles.length > 0;
+    const shouldHandleUrl = Boolean(
+        clipboardText &&
+        isHttpUrl(clipboardText) &&
+        !clipboardText.startsWith('http://localhost') &&
+        pluginInstance.settings.websiteUpload
+    );
+
+    if (hasClipboardFiles || shouldHandleUrl) {
+        consumeHandledEvent(clipboardEvent);
+    }
+
+    let filePath = '';
+
+    if (hasClipboardFiles) {
+        filePath = await getTransferFilePath(clipboardFiles[0]);
+    }
+
+    if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
+        if (!pluginInstance.settings.websiteUpload) {
+            return;
         }
 
-        // 添加延时等待
-        // await new Promise(resolve => setTimeout(resolve, 2000)); // 延时2秒
+        try {
+            const resolvedLink = await resolveUrlToEagleLink(clipboardText, pluginInstance);
+            editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
+            new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
+        } catch (error) {
+            print(`URL upload failed: ${toErrorMessage(error)}`);
+            new Notice('URL upload failed');
+        }
+        return;
+    }
 
-        // 监听 URL 更新事件
-        urlEmitter.once('urlUpdated', async (latestDirUrl: string) => {
-            // 提取 ID
-            print('latestDirUrl:', latestDirUrl);
-            const match = latestDirUrl.match(/images\/([^/]+)\.info/);
+    if (!filePath) {
+        return;
+    }
 
-            if (match && match[1]) {
-                const fileId = match[1];
-                 await new Promise(resolve => setTimeout(resolve, 2000));   
-                // 设置请求选项
-                const requestOptions = {
-                    method: 'GET',
-                    redirect: 'follow' as RequestRedirect 
-                };
-
-                try {
-                    // 发送请求以获取文件信息
-                    const response = await fetch(`http://localhost:41595/api/item/info?id=${fileId}`, requestOptions);
-                    const result = await response.json();
-
-                    if (result.status === "success" && result.data) {
-                        const fileName = result.data.name + "." + result.data.ext;
-                        // const fileName = path.basename(filePath);
-                        // 更新编辑器中的链接
-                        editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
-                    } else {
-                        print(`Failed to get file information: ${result}`);
-                    }
-                } catch (error) {
-                    print(`Request error: ${error}`);
-                }
-            } else {
-                print('Cannot extract file ID');
-            }
-        });
+    try {
+        const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
+        editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
+        new Notice('Eagle link converted');
     } catch (error) {
-        console.error('Fetch error:', error);
-        throw error;
+        if (toErrorMessage(error) === 'NON_EAGLE_FILE') {
+            new Notice('Non-Eagle link');
+            return;
+        }
+
+        print(`File upload failed: ${toErrorMessage(error)}`);
+        new Notice('File upload failed, check if Eagle is running');
     }
 }
 
+async function uploadByClipboard(filePath: string, pluginInstance: MyPlugin): Promise<void> {
+    const folderId = pluginInstance.settings.folderId || '';
+    const data = {
+        path: filePath,
+        name: path.basename(filePath),
+        folderId,
+    };
 
+    const response = await fetch('http://localhost:41595/api/item/addFromPath', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        redirect: 'follow' as RequestRedirect,
+    });
 
+    if (!response.ok) {
+        throw new Error('UPLOAD_FAILED');
+    }
+}
 
+async function uploadByUrl(url: string, pluginInstance: MyPlugin): Promise<void> {
+    const folderId = pluginInstance.settings.folderId || '';
+    const data = {
+        url,
+        folderId,
+    };
 
-// export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port: number, pluginInstance: MyPlugin) {
-//     dropEvent.preventDefault();
+    print('Request data:', data);
 
-//     // 在代码中添加详细日志
-//     console.log('原始拖拽数据:', {
-//         types: dropEvent.dataTransfer?.types,
-//         files: dropEvent.dataTransfer?.files,
-//         items: Array.from(dropEvent.dataTransfer?.items || []).map(i => ({
-//             kind: i.kind,
-//             type: i.type,
-//             getAsFile: i.getAsFile()
-//         }))
+    const response = await fetch('http://localhost:41595/api/item/addBookmark', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        redirect: 'follow' as RequestRedirect,
+    });
 
-//     });
+    if (!response.ok) {
+        try {
+            const errorResult = await response.json();
+            console.error('Error response:', errorResult);
+        } catch (error) {
+            print(`Failed to parse upload error: ${toErrorMessage(error)}`);
+        }
+        throw new Error('UPLOAD_FAILED');
+    }
+}
 
-//     // 获取系统平台信息
-//     const os = process.platform;
-//     const filePaths: string[] = [];
-    
+export async function handleDropEvent(
+    dropEvent: DragEvent,
+    editor: Editor,
+    _port: number,
+    pluginInstance: MyPlugin,
+) {
+    if (dropEvent.defaultPrevented) {
+        return;
+    }
 
-//     // 遍历拖拽项
-//     if (dropEvent.dataTransfer?.items) {
-//         const items = Array.from(dropEvent.dataTransfer.items); // 将 items 转换为数组
-//         for (const item of items) {
-//             if (item.kind === 'file') {
-//                 // 系统级路径获取逻辑
-//                 let filePath = "";
+    if (!dropEvent.dataTransfer?.files.length) {
+        return;
+    }
 
-//                 // Windows 系统处理
-//                 if (os === "win32") {
-//                     try {
-//                         // 通过私有 API 获取 NTFS 路径
-//                         const file = item.getAsFile() as any;
-//                         if (file?.path) {
-//                             filePath = file.path.replace(/\\/g, '/');
-//                         }
-//                     } catch (error) {
-//                         console.error('Windows路径获取失败:', error);
-//                     }
-//                 }
-//                 // macOS 系统处理
-//                 else if (os === "darwin") {
-//                     try {
-//                         // 通过私有数据格式获取路径
-//                         const uri = dropEvent.dataTransfer.getData('text/uri-list');
-//                         if (uri) {
-//                             filePath = decodeURIComponent(uri)
-//                                 .replace('file://', '')
-//                                 .replace(/\/([^/]+)$/, '$1'); // 安全解码
-//                         }
-//                     } catch (error) {
-//                         console.error('macOS路径获取失败:', error);
-//                     }
-//                 }
+    consumeHandledEvent(dropEvent);
 
-//                 // 备用方案：使用传统方式获取
-//                 if (!filePath) {
-//                     const file = item.getAsFile();
-//                     if (file) {
-//                         filePath = (file as any).path || `/${file.name}`;
-//                     }
-//                 }
-
-//                 if (filePath) {
-//                     filePaths.push(filePath);
-//                 }
-//             }
-//         }
-//     }
-
-//     // 处理所有获取到的文件路径
-//     if (filePaths.length > 0) {
-//         for (const filePath of filePaths) {
-//             console.log('解析后的完整路径:', filePath);
-
-//             try {
-//                 const file = new File([], filePath); // 创建一个空的 File 对象
-//                 await uploadByClipboard(file, pluginInstance);
-//                 new Notice('文件上传成功');
-
-//                 urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
-//                     const extension = filePath.split('.').pop()?.toLowerCase() || '';
-//                     const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension);
-                    
-//                     const fileName = filePath.split('/').pop() || filePath;
-//                     if (isImage) {
-//                         editor.replaceSelection(`![${fileName}](${latestDirUrl})`);
-//                     } else {
-//                         editor.replaceSelection(`[${fileName}](${latestDirUrl})`);
-//                     }
-//                     new Notice('链接已插入');
-//                 });
-//             } catch (error) {
-//                 console.error('上传失败:', error);
-//                 new Notice(`上传失败: ${error.message}`);
-//             }
-//         }
-//     }
-// }
-
-// // 新增工具函数
-// function getFilePath(file: File): string {
-//     // 类型安全的路径获取方式
-//     const anyFile = file as any;
-//     return anyFile.path || 
-//            anyFile.filepath ||  // 某些环境下可能使用不同属性名
-//            (anyFile.name && `/${anyFile.name}`) || // 备用方案
-//            'unknown_path';
-// }
-
-// function getFileExtension(path: string): string {
-//     return path.split('.').pop() || '';
-// }
-
-
-// 添加拖动事件处理
-export async function handleDropEvent(dropEvent: DragEvent, editor: Editor, port: number, pluginInstance: MyPlugin) {
-    // 阻止默认行为，这样我们可以自己处理拖放
-    dropEvent.preventDefault();
-    
-    
-    // 检查拖拽事件中的文件
-    if (dropEvent.dataTransfer?.files.length) {
-        const files = dropEvent.dataTransfer.files;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            // 使用 electron.webUtils.getPathForFile 获取文件路径
-            const filePath = electron.webUtils.getPathForFile(file);
-
+    for (const file of Array.from(dropEvent.dataTransfer.files)) {
+        try {
+            const filePath = await getTransferFilePath(file);
             print(`Drag file path: ${filePath}`);
 
-            if (!filePath.startsWith(pluginInstance.settings.libraryPath)) {
-                // 如果 filePath 不属于 pluginInstance.settings.libraryPath 的子文件
-                try {
-                    await uploadByClipboard(filePath, pluginInstance);
-                    new Notice('File uploaded successfully');
-
-                    // 监听 URL 更新事件
-                    urlEmitter.once('urlUpdated', (latestDirUrl: string) => {
-                        const fileName = path.basename(filePath);
-                        const fileExt = path.extname(filePath).toLowerCase();
-
-                        // 准备插入的文本
-                        let insertText;
-                        if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(fileExt)) {
-                            insertText = `![${fileName}|${pluginInstance.settings.imageSize}](${latestDirUrl})`;
-                            new Notice('Eagle link converted');
-                        } else {
-                            insertText = `[${fileName}](${latestDirUrl})`;
-                        }
-                        
-                        // 在拖放位置插入内容
-                        // 注意：Obsidian会自动处理拖放位置，我们只需要使用replaceSelection
-                        editor.replaceSelection(insertText);
-                        new Notice('Eagle链接已转换');
-                    });
-                } catch (error) {
-                    new Notice('File upload failed, check if Eagle is running');
-                }
-            } else {
-                // 检查 filePath 中是否包含 'images\xxxxxx.info' 模式
-                const match = filePath.match(/images\\[^\\]+\.info/);
-                if (match) {
-                    const fileName = path.basename(filePath);
-                    const fileExt = path.extname(filePath).toLowerCase();
-
-                    let updatedText;
-                    const urlPath = match[0].replace(/\\/g, '/'); // 将反斜杠替换为正斜杠
-
-                    if (['.png', '.jpg', '.jpeg'].includes(fileExt)) {
-                        updatedText = `![${fileName}|${pluginInstance.settings.imageSize}](http://localhost:${port}/${urlPath})`;
-                    } else {
-                        updatedText = `[${fileName}](http://localhost:${port}/${urlPath})`;
-                    }
-                    editor.replaceSelection(updatedText);
-                    new Notice('Eagle链接已转换');
-                } else {
-                    new Notice('非Eagle链接');
-                }
+            const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
+            editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
+            new Notice('Eagle link converted');
+        } catch (error) {
+            if (toErrorMessage(error) === 'NON_EAGLE_FILE') {
+                new Notice('Non-Eagle link');
+                continue;
             }
+
+            print(`File upload failed: ${toErrorMessage(error)}`);
+            new Notice('File upload failed, check if Eagle is running');
         }
     }
-} 
+}

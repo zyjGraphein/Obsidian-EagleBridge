@@ -13,6 +13,7 @@ import { isAltTextImage, isURL, isLocalHostLink} from './embed';
 import { embedManager } from './embed';
 import { embedField } from './embed-state-field';
 import { Extension } from "@codemirror/state";
+import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHandler';
 
 
 let DEBUG = false;
@@ -58,6 +59,7 @@ export default class MyPlugin extends Plugin {
 		});
 		// 在插件加载时启动服务器
 		startServer(this.settings.libraryPath, this.settings.port);
+		registerCanvasAutoNormalize(this);
 		// 添加设置面板
 		this.addSettingTab(new SampleSettingTab(this.app, this));
 		// await this.loadSettings();
@@ -248,6 +250,7 @@ export default class MyPlugin extends Plugin {
 				{ capture: true }
 			)
 		);
+		registerCanvasDocument(this, document);
 	}
 	handleImage(img: HTMLImageElement): HTMLElement | null {
 		try {
