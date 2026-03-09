@@ -209,10 +209,7 @@ async function updateTagsForInfoFile(id: string, tags: string[]) {
 
 function getPageTags(app: App, file: TFile, settings: MyPluginSettings): string[] {
 	const fileCache = app.metadataCache.getFileCache(file);
-	const yamlTags = normalizeFrontmatterTags(fileCache?.frontmatter?.tags);
-	const additionalTags = settings.advancedID ? getAdvancedIdTags(fileCache?.frontmatter?.id) : [];
-
-	return mergeUniqueStrings(yamlTags, additionalTags);
+	return normalizeFrontmatterTags(fileCache?.frontmatter?.tags);
 }
 
 function extractInfoFileIdsFromContent(fileContent: string): string[] {
@@ -239,18 +236,6 @@ function normalizeFrontmatterTags(value: unknown): string[] {
 			.split(',')
 			.map((entry) => entry.trim())
 			.filter((entry) => entry.length > 0);
-	}
-
-	return [];
-}
-
-function getAdvancedIdTags(value: unknown): string[] {
-	if (typeof value === 'string' && value.trim().length > 0) {
-		return [value.trim()];
-	}
-
-	if (typeof value === 'number' && Number.isFinite(value)) {
-		return [String(value)];
 	}
 
 	return [];

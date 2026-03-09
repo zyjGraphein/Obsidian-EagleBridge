@@ -4,7 +4,7 @@ import { handlePasteEvent, handleDropEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
-import { addCommandSynchronizedPageTabs,addCommandEagleJump, addCommandSyncCurrentPageObsidianLink } from "./addCommand-config";
+import { addCommandSynchronizedPageTabs, addCommandSyncCurrentPageObsidianLink } from "./addCommand-config";
 import { existsSync } from 'fs';
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
@@ -198,7 +198,6 @@ export default class MyPlugin extends Plugin {
 		});
 		// register all commands in addCommand function
 		addCommandSynchronizedPageTabs(this);
-		addCommandEagleJump(this);
 		addCommandSyncCurrentPageObsidianLink(this);
 		// 添加自定义样式，确保样式包含编辑模式特定样式
 		const style = document.createElement('style');
@@ -278,6 +277,7 @@ export default class MyPlugin extends Plugin {
 			upload: normalizeUploadSettings(loadedSettings),
 		};
 		delete (this.settings as MyPluginSettings & { websiteUpload?: boolean }).websiteUpload;
+		delete (this.settings as MyPluginSettings & { advancedID?: boolean }).advancedID;
 		delete (this.settings as MyPluginSettings & { autoSyncPageTags?: boolean }).autoSyncPageTags;
 		delete (this.settings as MyPluginSettings & { importEagleTagsToYaml?: boolean }).importEagleTagsToYaml;
 		this.updateLibraryPath(); // 更新Library Path

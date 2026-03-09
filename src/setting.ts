@@ -21,7 +21,6 @@ export interface MyPluginSettings {
 	folderId?: string;
 	clickView: boolean;
 	adaptiveRatio: number;
-	advancedID: boolean;
 	attachmentTagSyncMode: AttachmentTagSyncMode;
 	exactSyncPageTagsToEagle: boolean;
 	autoSyncObsidianLinkToEagle: boolean;
@@ -50,7 +49,6 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	folderId: '',
 	clickView: false,
 	adaptiveRatio: 0.8,
-	advancedID: false,
 	attachmentTagSyncMode: 'off',
 	exactSyncPageTagsToEagle: false,
 	autoSyncObsidianLinkToEagle: false,
@@ -237,17 +235,6 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 			slider.setDynamicTooltip();
 		});
-
-		new Setting(containerEl)
-            .setName("Synchronizing advanced URI as a tag")
-            .setDesc("Synchronize advanced URI as a tag when page ids exist.")
-            .addToggle((toggle) => {
-                toggle.setValue(this.plugin.settings.advancedID)
-                    .onChange(async (value) => {
-                        this.plugin.settings.advancedID = value;
-                        await this.plugin.saveSettings();
-                    });
-            });
 
 		const attachmentTagSyncPanel = containerEl.createDiv({ cls: 'eagle-tag-sync-panel' });
 		attachmentTagSyncPanel.createEl('h3', { text: 'Attachment tag sync' });
