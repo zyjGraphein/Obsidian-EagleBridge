@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Eagle to Obsidian</title>
+    <style>
+        :root {
+            --panel-bg: rgba(20, 22, 26, 0.96);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --surface-bg: #2f3338;
+            --surface-hover: #3a4048;
+            --input-bg: rgba(16, 18, 22, 0.96);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --accent: #8b5cf6;
+            --danger: rgba(255, 255, 255, 0.16);
+            --shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 11px;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+            background:
+                radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 34%),
+                linear-gradient(180deg, rgba(24, 26, 31, 0.98), rgba(14, 16, 20, 0.98));
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        .plugin-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--shadow);
+        }
+
+        .toolbar-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .buttons-row {
+            display: flex;
+            flex: 1;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .url-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin: 2px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 7px 12px;
+            background: var(--surface-bg);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+            transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+            -webkit-app-region: no-drag;
+        }
+
+        .url-btn:hover {
+            background: var(--surface-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+            z-index: 1;
+        }
+
+        .add-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent);
+            color: #ffffff;
+            font-size: 17px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .add-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+        }
+
+        .form-card {
+            display: none;
+            background: rgba(18, 20, 24, 0.9);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 12px;
+        }
+
+        .form-title {
+            margin-bottom: 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .form-field {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .inlineFormLabel {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        .form-input {
+            width: 80%;
+            max-width: 220px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--panel-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .form-input:focus,
+        .form-input:active,
+        .action-btn:focus,
+        .action-btn:active,
+        .add-btn:focus,
+        .add-btn:active {
+            outline: 2px solid var(--accent) !important;
+            outline-offset: 2px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            border: none;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffffff;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .confirm-btn {
+            background: var(--accent);
+        }
+
+        .cancel-btn {
+            background: var(--danger);
+        }
+
+        .svg-icon-wrapper {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .svg-icon-wrapper svg {
+            width: 15px !important;
+            height: 15px !important;
+            display: block;
+            fill: currentColor;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="plugin-shell">
+        <div class="toolbar-row">
+            <div id="urlButtonsContainer" class="buttons-row"></div>
+            <button id="registerUrlBtn" class="add-btn">+</button>
+        </div>
+
+        <div id="urlInlineForm" class="form-card">
+            <div class="form-title" id="inlineFormTitle">Register Link</div>
+            <div class="form-field">
+                <label class="inlineFormLabel">Name</label>
+                <input type="text" id="inlineUrlNameInput" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="inlineFormLabel">URL Address</label>
+                <input type="text" id="inlineUrlAddressInput" class="form-input">
+            </div>
+            <div class="form-actions">
+                <button id="inlineFormConfirmBtn" class="action-btn confirm-btn">Confirm</button>
+                <button id="inlineFormCancelBtn" class="action-btn cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const fs = require('fs');
+    const path = require('path');
+    const OBSIDIAN_METADATA_KEY = 'Obsidian';
+    const LEGACY_METADATA_KEY = 'SynchLink';
+    const DEFAULT_LINK_NAME = 'Obsidian';
+
+    let currentItem = null;
+    let urlList = [];
+    let editingIndex = null;
+    let metadataFilePath = null;
+
+    const registerUrlBtn = document.getElementById('registerUrlBtn');
+    const urlButtonsContainer = document.getElementById('urlButtonsContainer');
+    const urlInlineForm = document.getElementById('urlInlineForm');
+    const inlineFormTitle = document.getElementById('inlineFormTitle');
+    const inlineUrlNameInput = document.getElementById('inlineUrlNameInput');
+    const inlineUrlAddressInput = document.getElementById('inlineUrlAddressInput');
+    const inlineFormCancelBtn = document.getElementById('inlineFormCancelBtn');
+    const inlineFormConfirmBtn = document.getElementById('inlineFormConfirmBtn');
+
+    function normalizeEntry(entry) {
+        if (!entry || typeof entry.url !== 'string') {
+            return null;
+        }
+
+        return {
+            name: entry.name || DEFAULT_LINK_NAME,
+            url: entry.url
+        };
+    }
+
+    function showInlineForm(title, name = DEFAULT_LINK_NAME, url = '') {
+        inlineFormTitle.textContent = title;
+        inlineUrlNameInput.value = name;
+        inlineUrlAddressInput.value = url;
+        urlInlineForm.style.display = 'block';
+        inlineUrlNameInput.focus();
+    }
+
+    function hideInlineForm() {
+        urlInlineForm.style.display = 'none';
+    }
+
+    function getIconHtml(entry) {
+        if (entry.url && entry.url.startsWith('obsidian://')) {
+            const iconPath = path.join(__dirname, 'Obsidian.svg');
+            const svgContent = fs.readFileSync(iconPath, 'utf8');
+            return `<span class="svg-icon-wrapper">${svgContent}</span>`;
+        }
+
+        if (entry.url && entry.url.startsWith('zotero://')) {
+            const iconPath = path.join(__dirname, 'Zotero.svg');
+            const svgContent = fs.readFileSync(iconPath, 'utf8');
+            return `<span class="svg-icon-wrapper">${svgContent}</span>`;
+        }
+
+        return '';
+    }
+
+    function renderUrlButtons() {
+        urlButtonsContainer.innerHTML = '';
+        urlList.forEach((entry, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'url-btn';
+
+            const iconHtml = getIconHtml(entry);
+            if (iconHtml) {
+                btn.innerHTML = `${iconHtml}<span>${entry.name || DEFAULT_LINK_NAME}</span>`;
+            } else {
+                btn.textContent = entry.name || DEFAULT_LINK_NAME;
+            }
+
+            const childProcess = require('child_process');
+            btn.onclick = () => {
+                if (!entry.url) return;
+
+                if (/^(https?:\/\/)/i.test(entry.url)) {
+                    eagle.shell.openExternal(entry.url);
+                    return;
+                }
+
+                let targetPath = entry.url;
+                if (/^file:\/\//i.test(targetPath)) {
+                    targetPath = decodeURIComponent(targetPath.replace(/^file:\/\//i, ''));
+                }
+
+                console.log('Trying to open path:', targetPath);
+
+                if (fs.existsSync(targetPath) && fs.lstatSync(targetPath).isDirectory()) {
+                    eagle.shell.showItemInFolder(targetPath);
+                    return;
+                }
+
+                if (fs.existsSync(targetPath) && fs.lstatSync(targetPath).isFile()) {
+                    try {
+                        childProcess.exec(`start "" "${targetPath}"`);
+                    } catch (err) {
+                        console.error('Failed to open file with child_process:', err);
+                    }
+                    return;
+                }
+
+                eagle.shell.openExternal(entry.url);
+            };
+
+            btn.oncontextmenu = (e) => {
+                e.preventDefault();
+                eagle.contextMenu.open([
+                    {
+                        id: 'modify',
+                        label: 'Modify',
+                        click: () => {
+                            editingIndex = idx;
+                            showInlineForm('Modify Link', entry.name || DEFAULT_LINK_NAME, entry.url);
+                        }
+                    },
+                    {
+                        id: 'delete',
+                        label: 'Delete',
+                        click: async () => {
+                            urlList.splice(idx, 1);
+                            await saveObsidianLinks();
+                            renderUrlButtons();
+                        }
+                    }
+                ]);
+            };
+
+            urlButtonsContainer.appendChild(btn);
+        });
+    }
+
+    async function saveObsidianLinks() {
+        if (!metadataFilePath) return;
+        try {
+            const data = fs.readFileSync(metadataFilePath, 'utf8');
+            const json = JSON.parse(data);
+            json[OBSIDIAN_METADATA_KEY] = urlList.map(({ name, url }) => ({
+                name: name || DEFAULT_LINK_NAME,
+                url
+            }));
+            delete json[LEGACY_METADATA_KEY];
+            fs.writeFileSync(metadataFilePath, JSON.stringify(json, null, 2), 'utf8');
+        } catch (err) {
+            console.error('Failed to save Obsidian links:', err);
+        }
+    }
+
+    function loadObsidianLinks() {
+        urlList = [];
+        if (!metadataFilePath) return;
+
+        try {
+            const data = fs.readFileSync(metadataFilePath, 'utf8');
+            const json = JSON.parse(data);
+            const loadedList = Array.isArray(json[OBSIDIAN_METADATA_KEY])
+                ? json[OBSIDIAN_METADATA_KEY]
+                : Array.isArray(json[LEGACY_METADATA_KEY])
+                    ? json[LEGACY_METADATA_KEY]
+                    : [];
+
+            urlList = loadedList
+                .map(normalizeEntry)
+                .filter((entry) => Boolean(entry));
+        } catch (err) {
+            console.error('Failed to load Obsidian links:', err);
+        }
+    }
+
+    registerUrlBtn.onclick = () => {
+        editingIndex = null;
+        showInlineForm('Register Link', DEFAULT_LINK_NAME);
+    };
+
+    inlineFormCancelBtn.onclick = () => {
+        hideInlineForm();
+    };
+
+    inlineFormConfirmBtn.onclick = async () => {
+        const name = inlineUrlNameInput.value.trim() || DEFAULT_LINK_NAME;
+        const url = inlineUrlAddressInput.value.trim();
+        if (!url) return;
+
+        const entry = { name, url };
+        if (editingIndex !== null) {
+            urlList[editingIndex] = entry;
+        } else {
+            urlList.push(entry);
+        }
+
+        await saveObsidianLinks();
+        renderUrlButtons();
+        hideInlineForm();
+    };
+
+    eagle.onPluginCreate(async () => {
+        const items = await eagle.item.getSelected();
+        currentItem = items[0];
+        metadataFilePath = currentItem?.metadataFilePath;
+        loadObsidianLinks();
+        renderUrlButtons();
+    });
+    </script>
+</body>
+</html>

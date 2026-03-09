@@ -24,6 +24,7 @@ export interface MyPluginSettings {
 	advancedID: boolean;
 	attachmentTagSyncMode: AttachmentTagSyncMode;
 	exactSyncPageTagsToEagle: boolean;
+	autoSyncObsidianLinkToEagle: boolean;
 	obsidianStoreId: string;
 	imageSize: number | undefined;
 	upload: EagleUploadSettings;
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	advancedID: false,
 	attachmentTagSyncMode: 'off',
 	exactSyncPageTagsToEagle: false,
+	autoSyncObsidianLinkToEagle: false,
 	obsidianStoreId: '',
 	imageSize: undefined,
 	upload: { ...DEFAULT_UPLOAD_SETTINGS },
@@ -297,9 +299,28 @@ export class SampleSettingTab extends PluginSettingTab {
 				: 'Off mode: page tags and Eagle tags stay independent unless you run the manual append command.';
 		attachmentTagSyncHint.setText(activeModeText);
 
-		new Setting(containerEl)
+		const obsidianLinkSyncPanel = containerEl.createDiv({ cls: 'eagle-obsidian-link-panel' });
+		obsidianLinkSyncPanel.createEl('h3', { text: 'Obsidian link sync' });
+		obsidianLinkSyncPanel.createEl('p', {
+			text: 'Send the current page advanced URI to Eagle. The command always works; automatic mode only runs when new Eagle attachments appear in a page that already has YAML id.',
+			cls: 'eagle-obsidian-link-panel-desc',
+		});
+
+		new Setting(obsidianLinkSyncPanel)
+			.setName('Auto send page link to Eagle')
+			.setDesc('When new Eagle items are added into the current Markdown page, automatically write the page advanced URI into their Obsidian metadata.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.autoSyncObsidianLinkToEagle)
+					.onChange(async (value) => {
+						this.plugin.settings.autoSyncObsidianLinkToEagle = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshAutoTagSyncState();
+					});
+			});
+
+		new Setting(obsidianLinkSyncPanel)
 			.setName('Obsidian store ID')
-			.setDesc('Enter the Obsidian store ID')
+			.setDesc('Vault identifier used in obsidian://adv-uri links.')
 			.addText(text => text
 				.setPlaceholder('Enter Obsidian store ID')
 				.setValue(this.plugin.settings.obsidianStoreId)

@@ -133,6 +133,38 @@ If your plugin does not need CSS, delete this file.
     line-height: 1.45;
 }
 
+.eagle-obsidian-link-panel {
+    margin-top: 1rem;
+    padding: 18px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--text-accent) 8%, transparent), transparent 30%),
+        linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+}
+
+.eagle-obsidian-link-panel h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+}
+
+.eagle-obsidian-link-panel-desc {
+    margin: 0 0 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.eagle-obsidian-link-panel .setting-item {
+    margin: 0;
+    padding: 14px 0;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.eagle-obsidian-link-panel .setting-item:first-of-type {
+    border-top: none;
+    padding-top: 0;
+}
+
 @media (max-width: 900px) {
     .eagle-upload-grid {
         grid-template-columns: 1fr;

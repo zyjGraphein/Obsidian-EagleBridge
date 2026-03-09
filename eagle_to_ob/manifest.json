@@ -1,0 +1,19 @@
+{
+    "id": "a7490490-db2c-4910-8a12-514e5344c0c2",
+    "version": "1.0.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "ob",
+    "logo": "/logo.png",
+    "keywords": [],
+    "devTools": true,
+    "preview": {
+        "jpg,png": {
+            "inspector": {
+                "path": "index.html",
+                "height": 100,
+                "multiSelect": false
+            }
+        }
+    }
+}

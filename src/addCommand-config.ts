@@ -1,6 +1,7 @@
 import MyPlugin from './main';
 import { syncCurrentPageTags } from "./synchronizedpagetabs";
 import { jumpModal } from "./eaglejumpobsidian";
+import { syncCurrentPageObsidianLinkToEagle } from './obsidianLinkSync';
 
 export const addCommandSynchronizedPageTabs = (myPlugin: MyPlugin) => {
 	myPlugin.addCommand({
@@ -18,6 +19,16 @@ export const addCommandEagleJump = (myPlugin: MyPlugin) => {
 		name: "eagle-jump-obsidian",
 		callback: async () => {
 			jumpModal(myPlugin.app, myPlugin.settings);
+		},
+	});
+};
+
+export const addCommandSyncCurrentPageObsidianLink = (myPlugin: MyPlugin) => {
+	myPlugin.addCommand({
+		id: "sync-current-page-obsidian-link-to-eagle",
+		name: "Send current page Obsidian link to Eagle",
+		callback: async () => {
+			await syncCurrentPageObsidianLinkToEagle(myPlugin.app, myPlugin.settings);
 		},
 	});
 };
