@@ -1,4 +1,5 @@
 import { Editor, Notice } from 'obsidian';
+import { EditorView } from '@codemirror/view';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -42,6 +43,56 @@ export interface ResolvedEagleLink {
     url: string;
     fileName: string;
     isImage: boolean;
+}
+
+function getEditorView(editor: Editor): EditorView | null {
+    const editorView = (editor as Editor & { cm?: EditorView }).cm;
+    return editorView instanceof EditorView ? editorView : null;
+}
+
+function resolveEditorDropPosition(editor: Editor, dragEvent: DragEvent) {
+    const editorView = getEditorView(editor);
+    if (!editorView) {
+        return null;
+    }
+
+    const dropOffset = editorView.posAtCoords({
+        x: dragEvent.clientX,
+        y: dragEvent.clientY,
+    });
+
+    if (typeof dropOffset !== 'number') {
+        return null;
+    }
+
+    return editor.offsetToPos(dropOffset);
+}
+
+export function syncEditorCursorToDragEvent(editor: Editor, dragEvent: DragEvent): boolean {
+    const dropPosition = resolveEditorDropPosition(editor, dragEvent);
+    if (!dropPosition) {
+        return false;
+    }
+
+    editor.setSelection(dropPosition, dropPosition);
+    return true;
+}
+
+export function shouldTrackMarkdownDragCursor(
+    dragEvent: DragEvent,
+    pluginInstance: MyPlugin,
+): boolean {
+    const dataTransfer = dragEvent.dataTransfer;
+    if (!dataTransfer || !pluginInstance.settings.upload.enabled || !pluginInstance.settings.upload.markdown) {
+        return false;
+    }
+
+    if (dataTransfer.types.includes('Files')) {
+        return true;
+    }
+
+    const transferFiles = getTransferFiles(dataTransfer);
+    return shouldUploadTransferFiles(transferFiles, pluginInstance, 'markdown');
 }
 
 function consumeHandledEvent(event: Event): void {
@@ -401,6 +452,7 @@ export async function handleDropEvent(
         return;
     }
 
+    syncEditorCursorToDragEvent(editor, dropEvent);
     consumeHandledEvent(dropEvent);
 
     for (const file of transferFiles) {

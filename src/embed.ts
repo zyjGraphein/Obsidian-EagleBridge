@@ -27,7 +27,10 @@ export function isLocalHostLink(str: string): boolean {
 export function isAltTextImage(alt: string): boolean {
     // 首先处理可能包含尺寸的情况，如 "image.png|700"
     const mainPart = alt.split('|')[0].trim();
-    return /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)$/i.test(mainPart);
+    if (!mainPart) {
+        return false;
+    }
+    return /^.+?\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)(?=$|[\s#\[{(])/i.test(mainPart);
 }
 
 // 基本嵌入数据结构

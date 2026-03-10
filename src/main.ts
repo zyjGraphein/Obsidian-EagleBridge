@@ -1,6 +1,6 @@
 import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
 import { startServer, refreshServer, stopServer } from './server';
-import { handlePasteEvent, handleDropEvent } from './urlHandler';
+import { handlePasteEvent, handleDropEvent, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
@@ -80,6 +80,23 @@ export default class MyPlugin extends Plugin {
 				handleDropEvent(event, editor, this.settings.port, this);
 			})
 		);
+		this.registerDomEvent(document, 'dragover', (event: DragEvent) => {
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!activeView || activeView.getMode() === 'preview') {
+				return;
+			}
+
+			const target = event.target as HTMLElement | null;
+			if (!target?.closest('.cm-editor')) {
+				return;
+			}
+
+			if (!shouldTrackMarkdownDragCursor(event, this)) {
+				return;
+			}
+
+			syncEditorCursorToDragEvent(activeView.editor, event);
+		}, { capture: true });
 		// 在插件加载时设置 DEBUG 状态
 		// console.log('Debug setting:', this.settings.debug);
 		this.registerEvent(
