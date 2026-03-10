@@ -16,6 +16,7 @@ import { Extension } from "@codemirror/state";
 import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHandler';
 import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToItemIds } from './synchronizedpagetabs';
 import { syncObsidianLinkForFile } from './obsidianLinkSync';
+import { registerMarkdownExportFileMenu } from './exportMarkdown';
 
 
 let DEBUG = false;
@@ -199,6 +200,7 @@ export default class MyPlugin extends Plugin {
 		// register all commands in addCommand function
 		addCommandSynchronizedPageTabs(this);
 		addCommandSyncCurrentPageObsidianLink(this);
+		registerMarkdownExportFileMenu(this);
 		// 添加自定义样式，确保样式包含编辑模式特定样式
 		const style = document.createElement('style');
 		style.textContent = `

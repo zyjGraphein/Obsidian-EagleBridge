@@ -13,6 +13,7 @@ export interface EagleUploadSettings {
 }
 
 export type AttachmentTagSyncMode = 'off' | 'appendPageTagsToEagle' | 'importEagleTagsToYaml';
+export type MarkdownExportFormat = 'folder' | 'zip';
 
 export interface MyPluginSettings {
 	mySetting: string;
@@ -30,6 +31,8 @@ export interface MyPluginSettings {
 	libraryPaths: string[];
 	debug: boolean;
 	openInObsidian: string;
+	markdownExportFormat: MarkdownExportFormat;
+	markdownExportDestinationPath: string;
 }
 
 export const DEFAULT_UPLOAD_SETTINGS: EagleUploadSettings = {
@@ -58,6 +61,8 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	libraryPaths: [],
 	debug: false,
 	openInObsidian: 'newPage',
+	markdownExportFormat: 'folder',
+	markdownExportDestinationPath: '',
 }
 
 type LegacyUploadSettings = Partial<EagleUploadSettings> & {
