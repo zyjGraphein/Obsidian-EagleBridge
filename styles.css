@@ -170,3 +170,444 @@ If your plugin does not need CSS, delete this file.
         grid-template-columns: 1fr;
     }
 }
+
+.eagle-ref-view {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    height: 100%;
+    padding: 14px;
+    overflow: hidden;
+}
+
+.eagle-ref-toolbar,
+.eagle-ref-section-header,
+.eagle-ref-summary-header,
+.eagle-ref-file-row,
+.eagle-ref-item-row,
+.eagle-ref-search-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.eagle-ref-toolbar-group,
+.eagle-ref-summary-text,
+.eagle-ref-file-text,
+.eagle-ref-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.eagle-ref-toolbar-actions,
+.eagle-ref-summary-actions,
+.eagle-ref-item-meta,
+.eagle-ref-file-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.eagle-ref-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.eagle-ref-stats,
+.eagle-ref-search-hint,
+.eagle-ref-section-meta,
+.eagle-ref-summary-meta,
+.eagle-ref-file-path,
+.eagle-ref-item-id,
+.eagle-ref-graph-note,
+.eagle-ref-graph-overflow {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+.eagle-ref-search-row {
+    align-items: stretch;
+}
+
+.eagle-ref-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--background-primary);
+}
+
+.eagle-ref-section,
+.eagle-ref-card {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--text-accent) 8%, transparent), transparent 34%),
+        linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+}
+
+.eagle-ref-section {
+    padding: 12px;
+}
+
+.eagle-ref-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.eagle-ref-chip {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: var(--background-primary);
+    cursor: pointer;
+}
+
+.eagle-ref-chip.is-selected {
+    border-color: color-mix(in srgb, var(--text-accent) 40%, var(--background-modifier-border));
+    background: color-mix(in srgb, var(--text-accent) 12%, var(--background-primary));
+    color: var(--text-normal);
+}
+
+.eagle-ref-main {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 14px;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.eagle-ref-sidebar,
+.eagle-ref-details {
+    min-height: 0;
+    overflow: auto;
+}
+
+.eagle-ref-sidebar {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 14px;
+    background: var(--background-primary-alt);
+    padding: 12px;
+}
+
+.eagle-ref-item-list,
+.eagle-ref-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.eagle-ref-item-row,
+.eagle-ref-file-row {
+    padding: 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    background: var(--background-primary);
+    cursor: pointer;
+}
+
+.eagle-ref-item-row.is-selected,
+.eagle-ref-file-row.is-active {
+    border-color: color-mix(in srgb, var(--text-accent) 42%, var(--background-modifier-border));
+    background: color-mix(in srgb, var(--text-accent) 10%, var(--background-primary));
+}
+
+.eagle-ref-item-name,
+.eagle-ref-file-name,
+.eagle-ref-section-title {
+    font-weight: 600;
+}
+
+.eagle-ref-card {
+    padding: 14px;
+}
+
+.eagle-ref-summary-header {
+    align-items: flex-start;
+}
+
+.eagle-ref-summary-text h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.eagle-ref-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--background-modifier-border) 45%, transparent);
+    font-size: 0.78rem;
+    color: var(--text-normal);
+    white-space: nowrap;
+}
+
+.eagle-ref-pill-muted {
+    color: var(--text-muted);
+}
+
+.eagle-ref-pill-accent {
+    background: color-mix(in srgb, var(--text-accent) 18%, transparent);
+}
+
+.eagle-ref-pill-markdown {
+    background: color-mix(in srgb, #5c7cff 20%, transparent);
+}
+
+.eagle-ref-pill-canvas {
+    background: color-mix(in srgb, #f28c28 22%, transparent);
+}
+
+.eagle-ref-graph {
+    min-height: 320px;
+    margin-top: 12px;
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at center, color-mix(in srgb, var(--text-accent) 6%, transparent), transparent 42%),
+        var(--background-primary);
+    overflow: hidden;
+}
+
+.eagle-ref-graph-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.eagle-ref-graph-edge {
+    stroke: color-mix(in srgb, var(--text-muted) 35%, transparent);
+    stroke-width: 1.5;
+}
+
+.eagle-ref-graph-node circle {
+    stroke-width: 2;
+}
+
+.eagle-ref-graph-node.is-item circle {
+    fill: color-mix(in srgb, var(--text-accent) 18%, var(--background-primary));
+    stroke: color-mix(in srgb, var(--text-accent) 52%, transparent);
+}
+
+.eagle-ref-graph-node.is-file.is-markdown circle {
+    fill: color-mix(in srgb, #5c7cff 18%, var(--background-primary));
+    stroke: color-mix(in srgb, #5c7cff 50%, transparent);
+}
+
+.eagle-ref-graph-node.is-file.is-canvas circle {
+    fill: color-mix(in srgb, #f28c28 18%, var(--background-primary));
+    stroke: color-mix(in srgb, #f28c28 56%, transparent);
+}
+
+.eagle-ref-graph-node.is-file.is-active circle {
+    stroke: var(--text-accent);
+}
+
+.eagle-ref-graph-label {
+    fill: var(--text-normal);
+    font-size: 12px;
+}
+
+.eagle-ref-graph-label.is-item {
+    font-weight: 700;
+}
+
+.eagle-ref-empty,
+.eagle-ref-details-empty {
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--background-primary-alt);
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+    .eagle-ref-main {
+        grid-template-columns: 1fr;
+    }
+
+    .eagle-ref-graph {
+        min-height: 280px;
+    }
+}
+
+.eagle-ref-view {
+    gap: 16px;
+}
+
+.eagle-ref-toolbar {
+    align-items: flex-start;
+}
+
+.eagle-ref-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.eagle-ref-search-card,
+.eagle-ref-picker-card,
+.eagle-ref-summary-card {
+    padding: 16px;
+}
+
+.eagle-ref-search-row {
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.eagle-ref-scope-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.eagle-ref-scope-button {
+    border: none;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.eagle-ref-scope-button.is-active {
+    background: color-mix(in srgb, var(--text-accent) 16%, var(--background-primary));
+    color: var(--text-normal);
+}
+
+.eagle-ref-search-hint {
+    margin-top: 10px;
+}
+
+.eagle-ref-chip-list {
+    max-height: 132px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.eagle-ref-chip {
+    font-size: 0.9rem;
+}
+
+.eagle-ref-details {
+    gap: 14px;
+    overflow: visible;
+}
+
+.eagle-ref-summary-header {
+    gap: 16px;
+}
+
+.eagle-ref-summary-actions {
+    justify-content: flex-end;
+}
+
+.eagle-ref-summary-actions button,
+.eagle-ref-detail-actions button {
+    white-space: nowrap;
+}
+
+.eagle-ref-detail-body {
+    margin-top: 14px;
+}
+
+.eagle-ref-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.eagle-ref-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    background: var(--background-primary);
+}
+
+.eagle-ref-field.is-wide {
+    grid-column: 1 / -1;
+}
+
+.eagle-ref-field-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.eagle-ref-field-desc {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+}
+
+.eagle-ref-field-value {
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.eagle-ref-input {
+    width: 100%;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--background-primary-alt);
+    color: var(--text-normal);
+}
+
+.eagle-ref-textarea {
+    min-height: 104px;
+    resize: vertical;
+}
+
+.eagle-ref-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.eagle-ref-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.eagle-ref-file-row {
+    align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+    .eagle-ref-search-row,
+    .eagle-ref-summary-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .eagle-ref-summary-actions {
+        justify-content: flex-start;
+    }
+
+    .eagle-ref-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .eagle-ref-field.is-wide {
+        grid-column: auto;
+    }
+}

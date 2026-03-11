@@ -6,6 +6,7 @@ import { print } from './main';
 import { exec, execSync, spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { EditorView} from '@codemirror/view';
+import { extractEagleItemIdFromUrl } from './eagleReferenceView';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -170,6 +171,16 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                     const eagleLink = `eagle://item/${id}`;
                     navigator.clipboard.writeText(eagleLink);
                     await shell.openExternal(eagleLink);
+                })
+        );
+
+        menu.addItem((item: MenuItem) =>
+            item
+                .setIcon("network")
+                .setTitle("Show Eagle references")
+                .onClick(async () => {
+                    const itemId = extractEagleItemIdFromUrl(oburl);
+                    await plugin.openEagleReferenceView(itemId);
                 })
         );
 

@@ -17,6 +17,7 @@ import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHan
 import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToItemIds } from './synchronizedpagetabs';
 import { syncObsidianLinkForFile } from './obsidianLinkSync';
 import { registerMarkdownExportFileMenu } from './exportMarkdown';
+import { EagleReferenceIndex, EagleReferenceView, EAGLE_REFERENCE_VIEW_TYPE, activateEagleReferenceView } from './eagleReferenceView';
 
 
 let DEBUG = false;
@@ -34,6 +35,7 @@ export function setDebug(value: boolean) {
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
+	eagleReferenceIndex: EagleReferenceIndex;
 	private autoTagSyncStates = new Map<string, FileTagSyncState>();
 	private autoTagSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -41,6 +43,32 @@ export default class MyPlugin extends Plugin {
 		console.log('加载 Eagle-Embed 插件');
 		
 		await this.loadSettings();
+		this.eagleReferenceIndex = new EagleReferenceIndex(this);
+		this.register(() => {
+			this.eagleReferenceIndex.destroy();
+		});
+		this.registerView(EAGLE_REFERENCE_VIEW_TYPE, (leaf) => new EagleReferenceView(leaf, this));
+		this.register(() => {
+			this.app.workspace.getLeavesOfType(EAGLE_REFERENCE_VIEW_TYPE).forEach((leaf) => leaf.detach());
+		});
+		this.addRibbonIcon('network', 'Open Eagle reference view', () => {
+			void this.openEagleReferenceView();
+		});
+		this.addCommand({
+			id: 'open-eagle-reference-view',
+			name: 'Open Eagle reference view',
+			callback: () => {
+				void this.openEagleReferenceView();
+			},
+		});
+		this.addCommand({
+			id: 'refresh-eagle-reference-index',
+			name: 'Refresh Eagle reference index',
+			callback: async () => {
+				await this.eagleReferenceIndex.rebuild();
+				new Notice('Eagle reference index refreshed.');
+			},
+		});
 		
 		// 注册编辑器扩展，务必正确导入和注册
 		this.registerEditorExtension([embedField]);
@@ -103,6 +131,7 @@ export default class MyPlugin extends Plugin {
 			this.app.vault.on('modify', (file) => {
 				if (file instanceof TFile) {
 					this.scheduleAutoTagSync(file);
+					this.scheduleEagleReferenceRefresh(file);
 				}
 			})
 		);
@@ -113,8 +142,11 @@ export default class MyPlugin extends Plugin {
 		);
 		this.registerEvent(
 			this.app.vault.on('create', (file) => {
-				if (file instanceof TFile && file.extension === 'md') {
-					this.scheduleAutoTagSync(file);
+				if (file instanceof TFile) {
+					if (file.extension === 'md') {
+						this.scheduleAutoTagSync(file);
+					}
+					this.scheduleEagleReferenceRefresh(file);
 				}
 			})
 		);
@@ -123,6 +155,7 @@ export default class MyPlugin extends Plugin {
 				if (file instanceof TFile) {
 					this.clearAutoTagSyncTimer(file.path);
 					this.autoTagSyncStates.delete(file.path);
+					this.scheduleEagleReferenceRefresh(file);
 				}
 			})
 		);
@@ -136,6 +169,12 @@ export default class MyPlugin extends Plugin {
 						this.autoTagSyncStates.set(file.path, previousState);
 					}
 					this.scheduleAutoTagSync(file);
+				}
+				if (file instanceof TFile) {
+					this.scheduleEagleReferenceRefresh(file);
+				}
+				if (this.isTrackedEagleReferencePath(oldPath)) {
+					this.eagleReferenceIndex.requestRefresh(50);
 				}
 			})
 		);
@@ -310,10 +349,15 @@ export default class MyPlugin extends Plugin {
 			}
 		}
 		await this.saveSettings();
+		this.eagleReferenceIndex?.requestRefresh(50);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	async openEagleReferenceView(itemId?: string | null) {
+		return activateEagleReferenceView(this, { itemId });
 	}
 
 	refreshAutoTagSyncState() {
@@ -407,6 +451,19 @@ export default class MyPlugin extends Plugin {
 			|| this.settings.autoSyncObsidianLinkToEagle;
 	}
 	// 注册图片右键菜单事件
+	private scheduleEagleReferenceRefresh(file: TFile) {
+		if (!this.isTrackedEagleReferencePath(file)) {
+			return;
+		}
+
+		this.eagleReferenceIndex.requestRefresh(350);
+	}
+
+	private isTrackedEagleReferencePath(fileOrPath: TFile | string) {
+		const targetPath = typeof fileOrPath === 'string' ? fileOrPath : fileOrPath.path;
+		return targetPath.endsWith('.md') || targetPath.endsWith('.canvas');
+	}
+
 	registerDocument(document: Document) {
 		this.register(
 			onElement(

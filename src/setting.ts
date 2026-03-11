@@ -322,7 +322,7 @@ export class SampleSettingTab extends PluginSettingTab {
 				}));
 		new Setting(containerEl)
 		.setName('Open in obsidian')
-		.setDesc('Default opening of attachments in obsidian')
+		.setDesc('Default opening of attachments in obsidian. Note: The Web Viewer must be enabled in the core plugin to use this feature. ')
 		.addDropdown(dropdown => {
 			dropdown.addOption('newPage', 'Open in new page')
 				.addOption('popup', 'Open in popup')
