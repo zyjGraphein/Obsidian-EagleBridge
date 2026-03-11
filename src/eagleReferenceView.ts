@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { App, ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from 'obsidian';
 import MyPlugin from './main';
+import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -489,7 +490,7 @@ export class EagleReferenceIndex {
 				continue;
 			}
 
-			const itemIds = Array.from(occurrences.keys()).sort(compareStrings);
+			const itemIds = Array.from(occurrences.keys());
 			fileToItemIds.set(file.path, itemIds);
 
 			for (const [itemId, occurrenceCount] of occurrences) {
@@ -600,6 +601,12 @@ export class EagleReferenceView extends ItemView {
 		});
 
 		this.registerEvent(this.app.workspace.on('file-open', () => {
+			if (!this.searchTerm) {
+				const activeItemIds = new Set(this.getActiveFileItemIds());
+				if (!this.selectedItemId || !activeItemIds.has(this.selectedItemId)) {
+					this.selectedItemId = null;
+				}
+			}
 			this.ensureSelectedItem();
 			void this.syncSelectedItemDetails();
 			this.render();
@@ -819,17 +826,19 @@ export class EagleReferenceView extends ItemView {
 				.filter((item): item is EagleItemReference => Boolean(item));
 		}
 
-		items = items.slice().sort((left, right) => {
-			if (right.referenceCount !== left.referenceCount) {
-				return right.referenceCount - left.referenceCount;
-			}
-			if (right.mentionCount !== left.mentionCount) {
-				return right.mentionCount - left.mentionCount;
-			}
-			return compareStrings(left.displayName, right.displayName);
-		});
+		if (this.searchTerm) {
+			items = items.slice().sort((left, right) => {
+				if (right.referenceCount !== left.referenceCount) {
+					return right.referenceCount - left.referenceCount;
+				}
+				if (right.mentionCount !== left.mentionCount) {
+					return right.mentionCount - left.mentionCount;
+				}
+				return compareStrings(left.displayName, right.displayName);
+			});
+		}
 
-		if (this.selectedItemId) {
+		if (this.searchTerm && this.selectedItemId) {
 			const selectedItem = this.snapshot.itemsById.get(this.selectedItemId);
 			if (selectedItem && !items.some((item) => item.itemId === selectedItem.itemId)) {
 				items.unshift(selectedItem);
@@ -863,6 +872,11 @@ export class EagleReferenceView extends ItemView {
 		}
 
 		if (this.selectedItemId && pickerItems.some((item) => item.itemId === this.selectedItemId)) {
+			return;
+		}
+
+		if (!this.searchTerm) {
+			this.selectedItemId = null;
 			return;
 		}
 
@@ -979,6 +993,22 @@ export class EagleReferenceView extends ItemView {
 		const openOtherButton = summaryActionsEl.createEl('button', { text: '其他应用' });
 		openOtherButton.addEventListener('click', () => {
 			void this.openSelectedItemFile('other');
+		});
+
+		const deleteButton = summaryActionsEl.createEl('button', { cls: 'mod-warning', text: '删除附件' });
+		deleteButton.addEventListener('click', () => {
+			openDeleteEagleAttachmentModal({
+				plugin: this.plugin,
+				item: selectedItem,
+				itemUrl: buildItemInfoUrl(selectedItem.itemId, this.plugin.settings.port),
+				contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
+				currentLinkMode: 'current-file-links',
+				currentLinkFile: this.getActiveFile(),
+				afterChange: async () => {
+					this.plugin.eagleReferenceIndex.requestRefresh(50);
+					await this.refreshIndex();
+				},
+			});
 		});
 
 		const detailBodyEl = summaryCardEl.createDiv({ cls: 'eagle-ref-detail-body' });

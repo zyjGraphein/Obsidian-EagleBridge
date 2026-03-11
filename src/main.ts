@@ -8,7 +8,7 @@ import { addCommandSynchronizedPageTabs, addCommandSyncCurrentPageObsidianLink }
 import { existsSync } from 'fs';
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
-import { handleLinkClick, eagleImageContextMenuCall, registerEscapeButton, addEagleImageMenuSourceMode, addEagleImageMenuPreviewMode, fetchImageInfo } from './menucall';
+import { handleLinkClick, eagleImageContextMenuCall, eagleLinkContextMenuCall, registerEscapeButton, addEagleImageMenuSourceMode, addEagleImageMenuPreviewMode, fetchImageInfo } from './menucall';
 import { isAltTextImage, isURL, isLocalHostLink} from './embed';
 import { embedManager } from './embed';
 import { embedField } from './embed-state-field';
@@ -471,6 +471,15 @@ export default class MyPlugin extends Plugin {
 				"contextmenu",
 				"img",
 				eagleImageContextMenuCall.bind(this),
+				{ capture: true }
+			)
+		);
+		this.register(
+			onElement(
+				document,
+				"contextmenu",
+				"a.external-link, span.external-link, .cm-link, a.cm-underline, iframe",
+				eagleLinkContextMenuCall.bind(this),
 				{ capture: true }
 			)
 		);

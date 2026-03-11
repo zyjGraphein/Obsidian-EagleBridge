@@ -1,4 +1,4 @@
-import { Menu, MenuItem, MarkdownView, Notice, Modal, App, Setting } from 'obsidian';
+import { Menu, MenuItem, MarkdownView, Notice, Modal, App, Setting, TFile } from 'obsidian';
 import MyPlugin from './main';
 import * as path from 'path';
 import { onElement } from './onElement';
@@ -7,6 +7,7 @@ import { exec, execSync, spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { EditorView} from '@codemirror/view';
 import { extractEagleItemIdFromUrl } from './eagleReferenceView';
+import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -62,6 +63,58 @@ function openFileInOtherApps(filePath: string): Promise<void> {
     });
 }
 
+function isEagleInfoUrl(url: string): boolean {
+    return /^http:\/\/localhost:\d+\/images\/[^/\s?#]+\.info$/i.test(url);
+}
+
+function getActiveReferenceFile(plugin: MyPlugin): TFile | null {
+    const activeFile = plugin.app.workspace.getActiveFile();
+    return activeFile instanceof TFile ? activeFile : null;
+}
+
+async function openDeleteAttachmentDialog(
+    plugin: MyPlugin,
+    url: string,
+    options: {
+        contextTitle: string;
+        currentLinkMode?: 'precise-current-link' | 'current-file-links';
+        currentLinkTargetPos?: number | null;
+        currentLinkFile?: TFile | null;
+        afterChange?: () => void | Promise<void>;
+    },
+) {
+    const itemId = extractEagleItemIdFromUrl(url);
+    if (!itemId) {
+        new Notice('无法识别当前 Eagle 附件。');
+        return;
+    }
+
+    const snapshot = await plugin.eagleReferenceIndex.ensureReady();
+    let item = snapshot.itemsById.get(itemId);
+    if (!item) {
+        const rebuiltSnapshot = await plugin.eagleReferenceIndex.rebuild();
+        item = rebuiltSnapshot.itemsById.get(itemId);
+    }
+    if (!item) {
+        new Notice('未在引用索引中找到该 Eagle 附件。请先刷新引用索引后再试。');
+        return;
+    }
+
+    openDeleteEagleAttachmentModal({
+        plugin,
+        item,
+        itemUrl: url,
+        contextTitle: options.contextTitle,
+        currentLinkMode: options.currentLinkMode,
+        currentLinkTargetPos: options.currentLinkTargetPos,
+        currentLinkFile: options.currentLinkFile ?? getActiveReferenceFile(plugin),
+        afterChange: async () => {
+            plugin.eagleReferenceIndex.requestRefresh(50);
+            await options.afterChange?.();
+        },
+    });
+}
+
 export function handleLinkClick(plugin: MyPlugin, event: MouseEvent, url: string) {
 	const menu = new Menu();
 	const inPreview = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
@@ -97,6 +150,75 @@ export function eagleImageContextMenuCall(this: MyPlugin, event: MouseEvent) {
 	let offset = 0;
 	if (!inPreview && (inTable || inCallout)) offset = -138;
 	menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
+}
+
+function resolveEagleUrlFromContextMenuEvent(plugin: MyPlugin, event: MouseEvent): { url: string; targetPos: number | null } | null {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+        return null;
+    }
+
+    const iframeTarget = target.closest('iframe') as HTMLIFrameElement | null;
+    if (iframeTarget?.src && isEagleInfoUrl(iframeTarget.src)) {
+        return { url: iframeTarget.src, targetPos: null };
+    }
+
+    const anchorTarget = target.closest('a.external-link') as HTMLAnchorElement | null;
+    if (anchorTarget?.href && isEagleInfoUrl(anchorTarget.href)) {
+        return { url: anchorTarget.href, targetPos: null };
+    }
+
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView || activeView.getMode() === 'preview') {
+        return null;
+    }
+
+    const editor = activeView.editor;
+    const editorView = (editor as any).cm as EditorView | undefined;
+    if (!editorView) {
+        return null;
+    }
+
+    const targetPos = editorView.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (typeof targetPos !== 'number') {
+        return null;
+    }
+
+    const targetLine = editorView.state.doc.lineAt(targetPos);
+    const lineText = targetLine.text;
+    const relativePos = targetPos - targetLine.from;
+    const urlMatches = Array.from(lineText.matchAll(/\bhttps?:\/\/[^\s)]+/g));
+    const matchedUrl = urlMatches.find((match) => {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        return relativePos >= start && relativePos <= end;
+    })?.[0] ?? urlMatches.find((match) => isEagleInfoUrl(match[0]))?.[0];
+
+    if (!matchedUrl || !isEagleInfoUrl(matchedUrl)) {
+        return null;
+    }
+
+    return { url: matchedUrl, targetPos };
+}
+
+export function eagleLinkContextMenuCall(this: MyPlugin, event: MouseEvent) {
+    const resolved = resolveEagleUrlFromContextMenuEvent(this, event);
+    if (!resolved) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const menu = new Menu();
+    const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() === "preview";
+    if (inPreview) {
+        void addEagleImageMenuPreviewMode(this, menu, resolved.url, event);
+    } else {
+        void addEagleImageMenuSourceMode(this, menu, resolved.url, event, resolved.targetPos);
+    }
+    registerEscapeButton(this, menu);
+    menu.showAtPosition({ x: event.pageX, y: event.pageY });
 }
 
 export function registerEscapeButton(plugin: MyPlugin, menu: Menu, document: Document = activeDocument) {
@@ -305,7 +427,7 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                 .setIcon("wrench")
                 .setTitle("Modify properties")
                 .onClick(() => {
-                    new ModifyPropertiesModal(this.app, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
+                    new ModifyPropertiesModal(plugin.app, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
                         // new Notice(`Name changed to: ${newName}`);
                         // 在这里处理保存逻辑
                     }).open();
@@ -314,10 +436,22 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
         // 其他菜单项可以继续使用 { id, name, ext } 数据
     }
 
+        menu.addItem((item: MenuItem) =>
+            item
+                .setIcon("trash-2")
+                .setTitle("Delete attachment")
+                .onClick(async () => {
+                    await openDeleteAttachmentDialog(plugin, oburl, {
+                        contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
+                        currentLinkMode: 'current-file-links',
+                        currentLinkFile: getActiveReferenceFile(plugin),
+                    });
+                })
+        );
 	menu.showAtPosition({ x: event.pageX, y: event.pageY });
 }
 
-export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, url: string, event: MouseEvent) {
+export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, url: string, event: MouseEvent, targetPos?: number | null) {
 	await addEagleImageMenuPreviewMode(plugin, menu, url, event);
 
     menu.addItem((item: MenuItem) =>
@@ -325,7 +459,7 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
             .setIcon("copy")
             .setTitle("Copy markdown link")
             .onClick(async () => {
-                const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+                const editor = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
                 if (!editor) {
                     new Notice('Cannot find the active editor');
                     return;
@@ -366,13 +500,32 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
                 try {
                     // Util.handlerDelFile(FileBaseName, currentMd, this);
                     const target = getMouseEventTarget(event);
-                    const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-                    const editorView = editor.cm as EditorView;
-                    const target_pos = editorView.posAtDOM(target);
+                    const editor = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+                    if (!editor) {
+                        throw new Error('NO_EDITOR');
+                    }
+                    const editorView = (editor as typeof editor & { cm?: EditorView }).cm;
+                    if (!editorView) {
+                        throw new Error('NO_EDITOR_VIEW');
+                    }
+                    const target_pos = typeof targetPos === 'number' ? targetPos : editorView.posAtDOM(target);
                     deleteCurTargetLink(url, plugin, target_pos);
                 } catch {
                     new Notice("Error, could not clear the file!");
                 }
+            })
+    );
+    menu.addItem((item: MenuItem) =>
+        item
+            .setIcon("trash")
+            .setTitle("Delete attachment")
+            .onClick(async () => {
+                await openDeleteAttachmentDialog(plugin, url, {
+                    contextTitle: '将删除 Eagle 附件，并可选择是否删除当前链接或全部链接',
+                    currentLinkMode: 'precise-current-link',
+                    currentLinkTargetPos: typeof targetPos === 'number' ? targetPos : null,
+                    currentLinkFile: getActiveReferenceFile(plugin),
+                });
             })
     );
 	menu.showAtPosition({ x: event.pageX, y: event.pageY });

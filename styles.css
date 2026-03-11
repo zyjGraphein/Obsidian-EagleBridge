@@ -611,3 +611,19 @@ If your plugin does not need CSS, delete this file.
         grid-column: auto;
     }
 }
+
+.eagle-delete-modal p {
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
+
+.eagle-delete-modal-hint {
+    color: var(--text-muted);
+}
+
+.eagle-delete-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
