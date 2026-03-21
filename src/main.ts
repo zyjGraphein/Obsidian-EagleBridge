@@ -249,8 +249,8 @@ export default class MyPlugin extends Plugin {
 		// 注册点击事件(参考AttachFlow)
 		this.registerDomEvent(document, 'click', async (evt: MouseEvent) => {
 			if (!this.settings.clickView) return;
-			handleImageClick(evt, this.settings.adaptiveRatio);
-		});
+			handleImageClick(this.app, evt, this.settings.adaptiveRatio);
+		}, { capture: true });
 
 		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key === 'Escape') {

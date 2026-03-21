@@ -1,5 +1,17 @@
 //from  [AttachFlow](https://github.com/Yaozhuwa/AttachFlow)
-export async function handleImageClick(evt: MouseEvent, adaptiveRatio: number) {
+import { App, MarkdownView } from 'obsidian';
+import { EditorView } from '@codemirror/view';
+
+const MARKDOWN_IMAGE_LINK_REGEX = /!\[[^\]]*\]\([^)]+\)/g;
+const WIKILINK_IMAGE_REGEX = /!\[\[[^\]]+\]\]/g;
+
+interface ImageReferenceRange {
+	from: number;
+	to: number;
+	score: number;
+}
+
+export async function handleImageClick(app: App, evt: MouseEvent, adaptiveRatio: number) {
 	const target = evt.target as HTMLElement;
 
 	if (target.tagName !== 'IMG') {
@@ -7,21 +19,39 @@ export async function handleImageClick(evt: MouseEvent, adaptiveRatio: number) {
 		return;
 	}
 
-	const rect = target.getBoundingClientRect();
+	if (target.id === 'af-zoomed-image') {
+		return;
+	}
+
+	const imageTarget = target as HTMLImageElement;
+	const rect = imageTarget.getBoundingClientRect();
 	const imageCenter = rect.left + rect.width / 2;
 
-	if (evt.clientX <= imageCenter || document.getElementById('af-zoomed-image')) return;
+	if (evt.clientX <= imageCenter) {
+		if (selectImageMarkdownSource(app, evt, imageTarget)) {
+			evt.preventDefault();
+			evt.stopPropagation();
+			evt.stopImmediatePropagation();
+		}
+		return;
+	}
+
+	if (document.getElementById('af-zoomed-image')) {
+		return;
+	}
 
 	evt.preventDefault();
+	evt.stopPropagation();
+	evt.stopImmediatePropagation();
 
-	const mask = createZoomMask();
-	const { zoomedImage, originalWidth, originalHeight } = await createZoomedImage((target as HTMLImageElement).src, adaptiveRatio);
+	createZoomMask();
+	const { zoomedImage, originalWidth, originalHeight } = await createZoomedImage(imageTarget.src, adaptiveRatio);
 	const scaleDiv = createZoomScaleDiv(zoomedImage, originalWidth, originalHeight);
 
 	zoomedImage.addEventListener('wheel', (e) => handleZoomMouseWheel(e, zoomedImage, originalWidth, originalHeight, scaleDiv));
 	zoomedImage.addEventListener('contextmenu', (e) => handleZoomContextMenu(e, zoomedImage, originalWidth, originalHeight, scaleDiv));
 	zoomedImage.addEventListener('mousedown', (e) => handleZoomDragStart(e, zoomedImage));
-	zoomedImage.addEventListener('dblclick', (e) => {
+	zoomedImage.addEventListener('dblclick', () => {
 		adaptivelyDisplayImage(zoomedImage, originalWidth, originalHeight, adaptiveRatio);
 		updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
 	});
@@ -36,7 +66,125 @@ export function removeZoomedImage() {
 	if (mask) document.body.removeChild(mask);
 }
 
-// ... existing functions like createZoomMask, createZoomedImage, adaptivelyDisplayImage, etc. ... 
+function selectImageMarkdownSource(app: App, evt: MouseEvent, imageTarget: HTMLImageElement): boolean {
+	const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeView || activeView.getMode() === 'preview') {
+		return false;
+	}
+
+	const editor = activeView.editor;
+	const editorView = (editor as MarkdownView['editor'] & { cm?: EditorView }).cm;
+	if (!(editorView instanceof EditorView)) {
+		return false;
+	}
+
+	const targetPos = editorView.posAtCoords({ x: evt.clientX, y: evt.clientY });
+	if (typeof targetPos !== 'number') {
+		return false;
+	}
+
+	const referenceRange = findClosestImageReferenceRange(editorView, targetPos, imageTarget.src);
+	if (!referenceRange) {
+		return false;
+	}
+
+	editor.setSelection(
+		editor.offsetToPos(referenceRange.from),
+		editor.offsetToPos(referenceRange.to),
+	);
+	editor.focus();
+	return true;
+}
+
+function findClosestImageReferenceRange(editorView: EditorView, targetPos: number, imageSrc: string): ImageReferenceRange | null {
+	const targetLine = editorView.state.doc.lineAt(targetPos);
+	const relativePos = targetPos - targetLine.from;
+	const exactLineMatch = collectImageReferenceRanges(targetLine.text, targetLine.from, relativePos, imageSrc);
+	if (exactLineMatch.length > 0) {
+		return exactLineMatch[0];
+	}
+
+	for (let distance = 1; distance <= 2; distance += 1) {
+		const previousLineNumber = targetLine.number - distance;
+		if (previousLineNumber >= 1) {
+			const previousLine = editorView.state.doc.line(previousLineNumber);
+			const previousMatches = collectImageReferenceRanges(
+				previousLine.text,
+				previousLine.from,
+				previousLine.text.length,
+				imageSrc,
+			);
+			if (previousMatches.length > 0) {
+				return previousMatches[0];
+			}
+		}
+
+		const nextLineNumber = targetLine.number + distance;
+		if (nextLineNumber <= editorView.state.doc.lines) {
+			const nextLine = editorView.state.doc.line(nextLineNumber);
+			const nextMatches = collectImageReferenceRanges(nextLine.text, nextLine.from, 0, imageSrc);
+			if (nextMatches.length > 0) {
+				return nextMatches[0];
+			}
+		}
+	}
+
+	return null;
+}
+
+function collectImageReferenceRanges(
+	lineText: string,
+	lineStart: number,
+	relativePos: number,
+	imageSrc: string,
+): ImageReferenceRange[] {
+	const ranges: ImageReferenceRange[] = [];
+
+	collectRegexRanges(MARKDOWN_IMAGE_LINK_REGEX, lineText, (match, from, to) => {
+		const score = scoreReferenceRange(from, to, relativePos, match[0], imageSrc);
+		ranges.push({ from: lineStart + from, to: lineStart + to, score });
+	});
+
+	collectRegexRanges(WIKILINK_IMAGE_REGEX, lineText, (match, from, to) => {
+		const score = scoreReferenceRange(from, to, relativePos, match[0], imageSrc);
+		ranges.push({ from: lineStart + from, to: lineStart + to, score });
+	});
+
+	return ranges.sort((left, right) => right.score - left.score || left.from - right.from);
+}
+
+function collectRegexRanges(
+	regex: RegExp,
+	lineText: string,
+	onMatch: (match: RegExpExecArray, from: number, to: number) => void,
+): void {
+	regex.lastIndex = 0;
+	let match: RegExpExecArray | null;
+	while ((match = regex.exec(lineText)) !== null) {
+		const from = match.index;
+		const to = match.index + match[0].length;
+		onMatch(match, from, to);
+	}
+	regex.lastIndex = 0;
+}
+
+function scoreReferenceRange(from: number, to: number, relativePos: number, rawReference: string, imageSrc: string): number {
+	let score = 0;
+	if (relativePos >= from && relativePos <= to) {
+		score += 1000;
+	}
+
+	const midpoint = (from + to) / 2;
+	score -= Math.abs(relativePos - midpoint);
+
+	if (imageSrc && rawReference.includes(imageSrc)) {
+		score += 500;
+	}
+
+	return score;
+}
+
+// ... existing functions like createZoomMask, createZoomedImage, adaptivelyDisplayImage, etc. ...
 // 创建放大图片的遮罩层
 function createZoomMask(): HTMLDivElement {
 	const mask = document.createElement('div');
@@ -51,7 +199,6 @@ function createZoomMask(): HTMLDivElement {
 	document.body.appendChild(mask);
 	return mask;
 }
-
 
 // 创建放大图片
 async function createZoomedImage(src: string, adaptive_ratio: number): Promise<{ zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number }> {
@@ -77,17 +224,14 @@ async function createZoomedImage(src: string, adaptive_ratio: number): Promise<{
 	};
 }
 
-
 // 自适应图片大小
 function adaptivelyDisplayImage(zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, adaptive_ratio: number) {
 	zoomedImage.style.left = `50%`;
 	zoomedImage.style.top = `50%`;
-	// 如果图片的尺寸大于屏幕尺寸，使其大小为屏幕尺寸的 adaptive_ratio
-	let screenRatio = adaptive_ratio;   // 屏幕尺寸比例
+	let screenRatio = adaptive_ratio;
 	let screenWidth = window.innerWidth;
 	let screenHeight = window.innerHeight;
 
-	// Adjust initial size of the image if it exceeds screen size
 	if (originalWidth > screenWidth || originalHeight > screenHeight) {
 		if (originalWidth / screenWidth > originalHeight / screenHeight) {
 			zoomedImage.style.width = `${screenWidth * screenRatio}px`;
@@ -112,13 +256,13 @@ function createZoomScaleDiv(zoomedImage: HTMLImageElement, originalWidth: number
 	document.body.appendChild(scaleDiv);
 	return scaleDiv;
 }
+
 // 更新百分比指示元素
 function updateZoomScaleDiv(scaleDiv: HTMLDivElement, zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number) {
-	// 获取当前的宽度和高度
 	const width = zoomedImage.offsetWidth;
 	const height = zoomedImage.offsetHeight;
 	let scalePercent = width / originalWidth * 100;
-	scaleDiv.innerText = `${width}×${height} (${scalePercent.toFixed(1)}%)`;
+	scaleDiv.innerText = `${width}x${height} (${scalePercent.toFixed(1)}%)`;
 }
 
 // 滚轮事件处理器
@@ -137,6 +281,7 @@ function handleZoomMouseWheel(e: WheelEvent, zoomedImage: HTMLImageElement, orig
 	zoomedImage.style.top = `${newTop}px`;
 	updateZoomScaleDiv(scaleDiv, zoomedImage, originalWidth, originalHeight);
 }
+
 // 鼠标右键点击事件处理器
 function handleZoomContextMenu(e: MouseEvent, zoomedImage: HTMLImageElement, originalWidth: number, originalHeight: number, scaleDiv: HTMLDivElement) {
 	e.preventDefault();
@@ -149,35 +294,25 @@ function handleZoomContextMenu(e: MouseEvent, zoomedImage: HTMLImageElement, ori
 
 // 拖动事件处理器
 function handleZoomDragStart(e: MouseEvent, zoomedImage: HTMLImageElement) {
-	// 事件处理的代码 ...
-	// 阻止浏览器默认的拖动事件
 	e.preventDefault();
 
-	// 记录点击位置
 	let clickX = e.clientX;
 	let clickY = e.clientY;
 
-	// 更新元素位置的回调函数
 	const updatePosition = (moveEvt: MouseEvent) => {
-		// 计算鼠标移动距离
 		let moveX = moveEvt.clientX - clickX;
 		let moveY = moveEvt.clientY - clickY;
 
-		// 定位图片位置
 		zoomedImage.style.left = `${zoomedImage.offsetLeft + moveX}px`;
 		zoomedImage.style.top = `${zoomedImage.offsetTop + moveY}px`;
 
-		// 更新点击位置
 		clickX = moveEvt.clientX;
 		clickY = moveEvt.clientY;
-	}
+	};
 
-	// 鼠标移动事件
 	document.addEventListener('mousemove', updatePosition);
 
-	// 鼠标松开事件
 	document.addEventListener('mouseup', function listener() {
-		// 移除鼠标移动和鼠标松开的监听器
 		document.removeEventListener('mousemove', updatePosition);
 		document.removeEventListener('mouseup', listener);
 	}, { once: true });

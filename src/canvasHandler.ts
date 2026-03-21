@@ -7,8 +7,8 @@ import {
     type ResolvedEagleLink,
     resolveFilePathToEagleLink,
     resolveUrlToEagleLink,
+    shouldConvertTransferFilesToEagleLinks,
     shouldUploadExternalUrl,
-    shouldUploadTransferFiles,
 } from './urlHandler';
 
 const DEFAULT_LINK_WIDTH = 420;
@@ -189,7 +189,7 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
 
     const clipboardData = event.clipboardData;
     const clipboardFiles = getTransferFiles(clipboardData);
-    const shouldHandleFiles = shouldUploadTransferFiles(clipboardFiles, plugin, 'canvas');
+    const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(clipboardFiles, plugin, 'canvas');
     const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
     const shouldHandleUrl = Boolean(
         clipboardText &&
@@ -250,7 +250,7 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
 
     const transferFiles = Array.from(event.dataTransfer?.files ?? []);
     if (transferFiles.length > 0) {
-        if (!shouldUploadTransferFiles(transferFiles, plugin, 'canvas')) {
+        if (!shouldConvertTransferFilesToEagleLinks(transferFiles, plugin, 'canvas')) {
             return;
         }
 

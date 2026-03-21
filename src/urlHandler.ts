@@ -45,6 +45,11 @@ export interface ResolvedEagleLink {
     isImage: boolean;
 }
 
+export function getNativeTransferFilePath(file: File): string | null {
+    const filePath = electron.webUtils.getPathForFile(file);
+    return typeof filePath === 'string' && filePath.length > 0 ? filePath : null;
+}
+
 function getEditorView(editor: Editor): EditorView | null {
     const editorView = (editor as Editor & { cm?: EditorView }).cm;
     return editorView instanceof EditorView ? editorView : null;
@@ -83,16 +88,16 @@ export function shouldTrackMarkdownDragCursor(
     pluginInstance: MyPlugin,
 ): boolean {
     const dataTransfer = dragEvent.dataTransfer;
-    if (!dataTransfer || !pluginInstance.settings.upload.enabled || !pluginInstance.settings.upload.markdown) {
+    if (!dataTransfer) {
         return false;
     }
 
+    const transferFiles = getTransferFiles(dataTransfer);
     if (dataTransfer.types.includes('Files')) {
-        return true;
+        return shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown');
     }
 
-    const transferFiles = getTransferFiles(dataTransfer);
-    return shouldUploadTransferFiles(transferFiles, pluginInstance, 'markdown');
+    return shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown');
 }
 
 function consumeHandledEvent(event: Event): void {
@@ -183,10 +188,33 @@ function shouldUploadTransferFile(file: File, pluginInstance: MyPlugin): boolean
     return isUploadContentEnabled(getUploadContentType(file.name), pluginInstance);
 }
 
+function isTransferFileAlreadyInEagleLibrary(file: File, pluginInstance: MyPlugin): boolean {
+    const filePath = getNativeTransferFilePath(file);
+    return Boolean(
+        filePath
+        && pluginInstance.settings.libraryPath
+        && isPathInsideDirectory(filePath, pluginInstance.settings.libraryPath),
+    );
+}
+
+function shouldConvertTransferFileToEagleLink(file: File, pluginInstance: MyPlugin, surface: UploadSurface): boolean {
+    if (isTransferFileAlreadyInEagleLibrary(file, pluginInstance)) {
+        return true;
+    }
+
+    return isUploadSurfaceEnabled(surface, pluginInstance)
+        && shouldUploadTransferFile(file, pluginInstance);
+}
+
 export function shouldUploadTransferFiles(files: File[], pluginInstance: MyPlugin, surface: UploadSurface): boolean {
     return isUploadSurfaceEnabled(surface, pluginInstance)
         && files.length > 0
         && files.every((file) => shouldUploadTransferFile(file, pluginInstance));
+}
+
+export function shouldConvertTransferFilesToEagleLinks(files: File[], pluginInstance: MyPlugin, surface: UploadSurface): boolean {
+    return files.length > 0
+        && files.every((file) => shouldConvertTransferFileToEagleLink(file, pluginInstance, surface));
 }
 
 export function shouldUploadExternalUrl(pluginInstance: MyPlugin, surface: UploadSurface): boolean {
@@ -269,7 +297,7 @@ export function createMarkdownLink(link: ResolvedEagleLink, imageSize: number | 
 }
 
 export async function getTransferFilePath(file: File): Promise<string> {
-    let filePath = electron.webUtils.getPathForFile(file);
+    let filePath = getNativeTransferFilePath(file);
     if (filePath) {
         return filePath;
     }
@@ -327,7 +355,7 @@ export async function handlePasteEvent(
     const clipboardData = clipboardEvent.clipboardData;
     const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
     const clipboardFiles = getTransferFiles(clipboardData);
-    const shouldHandleFiles = shouldUploadTransferFiles(clipboardFiles, pluginInstance, 'markdown');
+    const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(clipboardFiles, pluginInstance, 'markdown');
     const shouldHandleUrl = Boolean(
         clipboardText &&
         isHttpUrl(clipboardText) &&
@@ -448,7 +476,7 @@ export async function handleDropEvent(
         return;
     }
 
-    if (!shouldUploadTransferFiles(transferFiles, pluginInstance, 'markdown')) {
+    if (!shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown')) {
         return;
     }
 
