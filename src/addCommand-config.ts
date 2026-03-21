@@ -1,6 +1,7 @@
 import MyPlugin from './main';
 import { syncCurrentPageTags } from "./synchronizedpagetabs";
 import { syncCurrentPageObsidianLinkToEagle } from './obsidianLinkSync';
+import { uploadCurrentMarkdownAttachmentsToEagle } from './markdownAttachmentBatchUpload';
 
 export const addCommandSynchronizedPageTabs = (myPlugin: MyPlugin) => {
 	myPlugin.addCommand({
@@ -18,6 +19,26 @@ export const addCommandSyncCurrentPageObsidianLink = (myPlugin: MyPlugin) => {
 		name: "Send current page Obsidian link to Eagle",
 		callback: async () => {
 			await syncCurrentPageObsidianLinkToEagle(myPlugin.app, myPlugin.settings);
+		},
+	});
+};
+
+export const addCommandUploadCurrentMarkdownAttachments = (myPlugin: MyPlugin) => {
+	myPlugin.addCommand({
+		id: 'upload-current-markdown-attachments-to-eagle',
+		name: 'Upload current Markdown attachments to Eagle',
+		checkCallback: (checking: boolean) => {
+			const activeFile = myPlugin.app.workspace.getActiveFile();
+			const canRun = activeFile?.extension === 'md';
+			if (!canRun) {
+				return false;
+			}
+
+			if (!checking) {
+				void uploadCurrentMarkdownAttachmentsToEagle(myPlugin);
+			}
+
+			return true;
 		},
 	});
 };

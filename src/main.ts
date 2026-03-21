@@ -4,7 +4,11 @@ import { handlePasteEvent, handleDropEvent, shouldTrackMarkdownDragCursor, syncE
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
-import { addCommandSynchronizedPageTabs, addCommandSyncCurrentPageObsidianLink } from "./addCommand-config";
+import {
+	addCommandSynchronizedPageTabs,
+	addCommandSyncCurrentPageObsidianLink,
+	addCommandUploadCurrentMarkdownAttachments,
+} from "./addCommand-config";
 import { existsSync } from 'fs';
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
@@ -256,6 +260,7 @@ export default class MyPlugin extends Plugin {
 		// register all commands in addCommand function
 		addCommandSynchronizedPageTabs(this);
 		addCommandSyncCurrentPageObsidianLink(this);
+		addCommandUploadCurrentMarkdownAttachments(this);
 		registerMarkdownExportFileMenu(this);
 		// 添加自定义样式，确保样式包含编辑模式特定样式
 		const style = document.createElement('style');
