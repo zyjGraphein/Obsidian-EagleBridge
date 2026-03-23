@@ -7,6 +7,7 @@ import { urlEmitter } from './server';
 import type MyPlugin from './main';
 import { print } from './main';
 import { getEagleLibraryItemPath, isPathInsideDirectory } from './eaglePaths';
+import { extractEagleItemIdFromPathname, resolveEagleItemById } from './eagleItemResolver';
 import { getCurrentPageTags } from './synchronizedpagetabs';
 
 const electron = require('electron');
@@ -262,23 +263,43 @@ function buildLibraryLink(filePath: string, pluginInstance: MyPlugin): ResolvedE
     };
 }
 
-async function fetchUploadedItemFileName(latestDirUrl: string): Promise<string | null> {
-    const match = latestDirUrl.match(/images\/([^/]+)\.info/);
-    if (!match?.[1]) {
+function getUploadedItemId(latestDirUrl: string): string | null {
+    try {
+        const parsedUrl = new URL(latestDirUrl);
+        return extractEagleItemIdFromPathname(decodeURIComponent(parsedUrl.pathname));
+    } catch {
+        return null;
+    }
+}
+
+async function resolveUploadedSourceFileName(latestDirUrl: string, pluginInstance: MyPlugin): Promise<string | null> {
+    const itemId = getUploadedItemId(latestDirUrl);
+    if (!itemId) {
         return null;
     }
 
-    await delay(2000);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+        const resolvedItem = await resolveEagleItemById(pluginInstance.settings.libraryPath, itemId);
+        if (resolvedItem?.sourceFileName) {
+            return resolvedItem.sourceFileName;
+        }
+
+        await delay(300);
+    }
 
     try {
-        const response = await fetch(`http://localhost:41595/api/item/info?id=${match[1]}`, {
+        const response = await fetch(`http://localhost:41595/api/item/info?id=${itemId}`, {
             method: 'GET',
             redirect: 'follow' as RequestRedirect,
         });
         const result = await response.json();
 
         if (result.status === 'success' && result.data) {
-            return `${result.data.name}.${result.data.ext}`;
+            const fallbackName = typeof result.data.name === 'string' ? result.data.name.trim() : '';
+            const fallbackExt = typeof result.data.ext === 'string' ? result.data.ext.trim() : '';
+            if (fallbackName) {
+                return fallbackExt ? `${fallbackName}.${fallbackExt}` : fallbackName;
+            }
         }
     } catch (error) {
         print(`Request error: ${toErrorMessage(error)}`);
@@ -321,11 +342,12 @@ export async function resolveFilePathToEagleLink(filePath: string, pluginInstanc
     const nextUrlPromise = waitForNextUrlUpdate();
     await uploadByClipboard(filePath, pluginInstance);
     const latestDirUrl = await nextUrlPromise;
+    const resolvedFileName = await resolveUploadedSourceFileName(latestDirUrl, pluginInstance);
 
     return {
         url: latestDirUrl,
-        fileName: path.basename(filePath),
-        isImage: isImageExtension(filePath),
+        fileName: resolvedFileName || path.basename(filePath),
+        isImage: isImageExtension(resolvedFileName || filePath),
     };
 }
 
@@ -333,7 +355,7 @@ export async function resolveUrlToEagleLink(url: string, pluginInstance: MyPlugi
     const nextUrlPromise = waitForNextUrlUpdate();
     await uploadByUrl(url, pluginInstance);
     const latestDirUrl = await nextUrlPromise;
-    const fileName = await fetchUploadedItemFileName(latestDirUrl);
+    const fileName = await resolveUploadedSourceFileName(latestDirUrl, pluginInstance);
 
     return {
         url: latestDirUrl,

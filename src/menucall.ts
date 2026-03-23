@@ -8,6 +8,7 @@ import { existsSync } from 'fs';
 import { EditorView} from '@codemirror/view';
 import { extractEagleItemIdFromUrl } from './eagleReferenceView';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
+import { resolveEagleItemById } from './eagleItemResolver';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -65,6 +66,21 @@ function openFileInOtherApps(filePath: string): Promise<void> {
 
 function isEagleInfoUrl(url: string): boolean {
     return /^http:\/\/localhost:\d+\/images\/[^/\s?#]+\.info$/i.test(url);
+}
+
+async function resolveLocalFilePath(plugin: MyPlugin, itemId: string): Promise<string | null> {
+    const libraryPath = plugin.settings.libraryPath.trim();
+    if (!libraryPath) {
+        return null;
+    }
+
+    const resolvedItem = await resolveEagleItemById(libraryPath, itemId);
+    if (!resolvedItem?.sourceFilePath) {
+        return null;
+    }
+
+    print(`Resolved Eagle item ${itemId} to ${resolvedItem.sourceFilePath}`);
+    return resolvedItem.sourceFilePath;
 }
 
 function getActiveReferenceFile(plugin: MyPlugin): TFile | null {
@@ -311,23 +327,17 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                 .setIcon("square-arrow-out-up-right")
                 .setTitle("Open in the default app")
                 .onClick(async () => {
-                    const libraryPath = plugin.settings.libraryPath;
-                    const localFilePath = path.join(
-                        libraryPath,
-                        "images",
-                        `${id}.info`,
-                        `${name}.${ext}`
-                    );
-        
-                    // 打印路径用于调试
-                    new Notice(`File real path: ${localFilePath}`);
-                    // print(`文件的真实路径是: ${localFilePath}`);
-        
+                    const localFilePath = await resolveLocalFilePath(plugin, id);
+                    if (!localFilePath) {
+                        new Notice('Cannot find the local source file, please check Eagle library path');
+                        return;
+                    }
+
                     try {
                         await openFileInDefaultApp(localFilePath);
                     } catch (error) {
                         print('Error opening file:', error);
-                        new Notice('Cannot open the file, please check if the path is correct');
+                        new Notice('Cannot open the local source file');
                     }
                 })
         );
@@ -336,23 +346,17 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
                 .setIcon("external-link")
                 .setTitle(getOtherAppsMenuTitle())
                 .onClick(async () => {
-                    const libraryPath = plugin.settings.libraryPath;
-                    const localFilePath = path.join(
-                        libraryPath,
-                        "images",
-                        `${id}.info`,
-                        `${name}.${ext}`
-                    );
-        
-                    // 打印路径用于调试
-                    new Notice(`File real path: ${localFilePath}`);
-                    // print(`文件的真实路径是: ${localFilePath}`);
-        
+                    const localFilePath = await resolveLocalFilePath(plugin, id);
+                    if (!localFilePath) {
+                        new Notice('Cannot find the local source file, please check Eagle library path');
+                        return;
+                    }
+
                     try {
                         await openFileInOtherApps(localFilePath);
                     } catch (error) {
                         print('Error opening file:', error);
-                        new Notice('Cannot open the file, please check if the path is correct');
+                        new Notice('Cannot open the local source file');
                     }
                 })
         );	
@@ -361,14 +365,12 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
         item
             .setIcon("copy")
             .setTitle("Copy source file")
-            .onClick(() => {
-                const libraryPath = plugin.settings.libraryPath;
-                const localFilePath = path.join(
-                    libraryPath,
-                    "images",
-                    `${id}.info`,
-                    `${name}.${ext}`
-                );
+            .onClick(async () => {
+                const localFilePath = await resolveLocalFilePath(plugin, id);
+                if (!localFilePath) {
+                    new Notice("Cannot find the local source file", 3000);
+                    return;
+                }
                 try {
                     copyFileToClipboardCMD(localFilePath);
                     new Notice("Copied to clipboard!", 3000);

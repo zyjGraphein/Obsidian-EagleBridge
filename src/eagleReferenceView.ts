@@ -4,6 +4,7 @@ import * as path from 'path';
 import { App, ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from 'obsidian';
 import MyPlugin from './main';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
+import { resolveEagleItemById } from './eagleItemResolver';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -377,8 +378,8 @@ async function openFileInOtherApps(filePath: string): Promise<void> {
 	});
 }
 
-function resolveLocalFilePath(plugin: MyPlugin, info: EagleLiveItemInfo | null): string | null {
-	if (!info) {
+async function resolveLocalFilePath(plugin: MyPlugin, itemId: string | null): Promise<string | null> {
+	if (!itemId) {
 		return null;
 	}
 
@@ -387,7 +388,12 @@ function resolveLocalFilePath(plugin: MyPlugin, info: EagleLiveItemInfo | null):
 		return null;
 	}
 
-	return path.join(libraryPath, 'images', `${info.id}.info`, `${info.name}${info.ext}`);
+	const resolvedItem = await resolveEagleItemById(libraryPath, itemId);
+	if (!resolvedItem?.sourceFilePath) {
+		return null;
+	}
+
+	return resolvedItem.sourceFilePath;
 }
 
 export class EagleReferenceIndex {
@@ -1228,7 +1234,7 @@ export class EagleReferenceView extends ItemView {
 		}
 
 		this.itemDetails = details;
-		const filePath = resolveLocalFilePath(this.plugin, details);
+		const filePath = await resolveLocalFilePath(this.plugin, details.id);
 		if (!filePath || !fs.existsSync(filePath)) {
 			new Notice('找不到本地源文件，请确认 Eagle 库路径设置正确。');
 			return;

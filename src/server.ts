@@ -5,6 +5,7 @@ import chokidar from 'chokidar';
 import { EventEmitter } from 'events';
 import { print, setDebug } from './main';
 import { isPathInsideDirectory } from './eaglePaths';
+import { readEagleShortcutUrl, resolveEagleItemById } from './eagleItemResolver';
 
 let server: http.Server;
 let isServerRunning = false;
@@ -301,6 +302,168 @@ function renderCanvasResourceEmbedPage(resourceUrl: string, title: string, fileN
 </html>`;
 }
 
+function parseItemRequest(pathname: string): { itemId: string; requestedFileName: string | null } | null {
+    const match = pathname.match(/^\/images\/([^/]+)\.info(?:\/([^/]+))?\/?$/i);
+    if (!match?.[1]) {
+        return null;
+    }
+
+    return {
+        itemId: match[1],
+        requestedFileName: match[2] ?? null,
+    };
+}
+
+async function respondWithShortcutRedirect(res: http.ServerResponse, filePath: string): Promise<boolean> {
+    const targetUrl = await readEagleShortcutUrl(filePath);
+    if (targetUrl) {
+        res.writeHead(302, { 'Location': targetUrl });
+        res.end();
+        return true;
+    }
+
+    res.writeHead(204);
+    res.end();
+    return true;
+}
+
+async function respondWithFile(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    filePath: string,
+    stats: fs.Stats,
+    cacheControl?: string,
+): Promise<void> {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.url') {
+        await respondWithShortcutRedirect(res, filePath);
+        return;
+    }
+
+    const contentType = getContentType(ext);
+    if (contentType === null) {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
+
+    streamBinaryFile(req, res, filePath, contentType, stats, cacheControl);
+}
+
+async function respondWithResolvedItem(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    libraryPath: string,
+    itemId: string,
+    cacheControl?: string,
+): Promise<boolean> {
+    const resolvedItem = await resolveEagleItemById(libraryPath, itemId);
+    if (!resolvedItem?.sourceFilePath) {
+        return false;
+    }
+
+    const stats = await fs.promises.stat(resolvedItem.sourceFilePath).catch(() => null);
+    if (!stats?.isFile()) {
+        return false;
+    }
+
+    await respondWithFile(req, res, resolvedItem.sourceFilePath, stats, cacheControl);
+    return true;
+}
+
+async function handleServerRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    libraryPath: string,
+): Promise<void> {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+    const pathname = decodeURIComponent(url.pathname);
+    const filePath = path.join(libraryPath, pathname);
+    const noAutoplay = url.searchParams.has('noautoplay');
+
+    (req as any).noAutoplay = noAutoplay;
+
+    if (pathname === '/__eaglebridge__/canvas-image') {
+        const imageUrl = url.searchParams.get('src');
+        if (!imageUrl) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Missing src parameter');
+            return;
+        }
+
+        const imageTitle = getCanvasImageTitle(imageUrl, libraryPath);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderCanvasImageEmbedPage(imageUrl, imageTitle));
+        return;
+    }
+
+    if (pathname === '/__eaglebridge__/canvas-resource') {
+        const resourceUrl = url.searchParams.get('src');
+        const fileName = url.searchParams.get('filename');
+        if (!resourceUrl) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Missing src parameter');
+            return;
+        }
+
+        const resourceTitle = getCanvasResourceTitle(resourceUrl, fileName, libraryPath);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderCanvasResourceEmbedPage(resourceUrl, resourceTitle, fileName));
+        return;
+    }
+
+    const itemRequest = parseItemRequest(pathname);
+    if (itemRequest && itemRequest.requestedFileName?.toLowerCase() !== 'metadata.json') {
+        const servedResolvedItem = await respondWithResolvedItem(
+            req,
+            res,
+            libraryPath,
+            itemRequest.itemId,
+            itemRequest.requestedFileName ? 'public, max-age=604800' : undefined,
+        );
+        if (servedResolvedItem) {
+            return;
+        }
+    }
+
+    if (!isPathInsideDirectory(filePath, path.join(libraryPath, 'images'))) {
+        res.writeHead(404);
+        res.end();
+        return;
+    }
+
+    const stats = await fs.promises.stat(filePath).catch((error: NodeJS.ErrnoException) => error);
+    if (stats instanceof Error) {
+        if ((stats as NodeJS.ErrnoException).code === 'ENOENT') {
+            res.writeHead(404);
+            res.end();
+            return;
+        }
+
+        res.writeHead(500);
+        res.end('Internal Error');
+        return;
+    }
+
+    if (stats.isDirectory()) {
+        const itemId = parseItemRequest(pathname)?.itemId;
+        if (!itemId) {
+            res.writeHead(404);
+            res.end();
+            return;
+        }
+
+        const servedResolvedItem = await respondWithResolvedItem(req, res, libraryPath, itemId);
+        if (!servedResolvedItem) {
+            res.writeHead(404);
+            res.end();
+        }
+        return;
+    }
+
+    await respondWithFile(req, res, filePath, stats, 'public, max-age=604800');
+}
+
 export function startServer(libraryPath: string, port: number) {
     if (isServerRunning) return;
     
@@ -326,169 +489,13 @@ export function startServer(libraryPath: string, port: number) {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
         res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
         res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-
-        // 解析 URL 查询参数
-        const url = new URL(req.url || '/', `http://${req.headers.host}`);
-        const pathname = decodeURIComponent(url.pathname);
-        const filePath = path.join(libraryPath, pathname);
-        const noAutoplay = url.searchParams.has('noautoplay');
-        
-        // 将参数存储在请求对象中，以便后续处理时使用
-        (req as any).noAutoplay = noAutoplay;
-
-        if (pathname === '/__eaglebridge__/canvas-image') {
-            const imageUrl = url.searchParams.get('src');
-            if (!imageUrl) {
-                res.writeHead(400, { 'Content-Type': 'text/plain' });
-                res.end('Missing src parameter');
-                return;
+        void handleServerRequest(req, res, libraryPath).catch((error) => {
+            print('Server request failed:', error);
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
             }
-
-            const imageTitle = getCanvasImageTitle(imageUrl, libraryPath);
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(renderCanvasImageEmbedPage(imageUrl, imageTitle));
-            return;
-        }
-
-        if (pathname === '/__eaglebridge__/canvas-resource') {
-            const resourceUrl = url.searchParams.get('src');
-            const fileName = url.searchParams.get('filename');
-            if (!resourceUrl) {
-                res.writeHead(400, { 'Content-Type': 'text/plain' });
-                res.end('Missing src parameter');
-                return;
-            }
-
-            const resourceTitle = getCanvasResourceTitle(resourceUrl, fileName, libraryPath);
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(renderCanvasResourceEmbedPage(resourceUrl, resourceTitle, fileName));
-            return;
-        }
-
-        // 新增：提前验证请求路径是否在 images 目录下
-        if (!isPathInsideDirectory(filePath, path.join(libraryPath, 'images'))) {
-            res.writeHead(404);
-            res.end();
-            return;
-        }
-
-        fs.stat(filePath, (err, stats) => {
-            if (err) {
-                // 修改：静默处理 ENOENT 错误
-                if (err.code === 'ENOENT') {
-                    res.writeHead(404).end();
-                } else {
-                    res.writeHead(500).end('Internal Error');
-                }
-                return;
-            }
-
-            if (stats.isDirectory()) {
-                const jsonFilePath = path.join(filePath, 'metadata.json');
-                
-                // 新增：检查 metadata.json 是否存在
-                if (!fs.existsSync(jsonFilePath)) {
-                    res.writeHead(404).end();
-                    return;
-                }
-
-                fs.readFile(jsonFilePath, 'utf8', (err, data) => {
-                    if (err) {
-                        console.error('Error reading JSON file:', err);
-                        res.writeHead(500, {'Content-Type': 'text/plain'});
-                        res.end('Internal Server Error');
-                    } else {
-                        try {
-                            const info = JSON.parse(data);
-                            const imageName = info.name;
-                            // exportedData.imageName = imageName;
-                            // const annotation = info.annotation;
-                            // exportedData.annotation = annotation;
-                            const imageExt = info.ext;
-                            const imageFile = `${imageName}.${imageExt}`;
-                            const imagePath = path.join(filePath, imageFile);
-
-                            fs.stat(imagePath, (fileErr, fileStats) => {
-                                if (fileErr || !fileStats.isFile()) {
-                                    console.error('Error reading file:', fileErr);
-                                    res.writeHead(404, {'Content-Type': 'text/plain'});
-                                    res.end('File not found');
-                                    return;
-                                }
-
-                                if (imageExt === 'url') {
-                                    fs.readFile(imagePath, (readErr, data) => {
-                                        if (readErr) {
-                                            console.error('Error reading file:', readErr);
-                                            res.writeHead(404, {'Content-Type': 'text/plain'});
-                                            res.end('File not found');
-                                            return;
-                                        }
-
-                                        const content = data.toString('utf8');
-                                        const urlMatch = content.match(/URL=(.+)/i);
-                                        if (urlMatch && urlMatch[1]) {
-                                            res.writeHead(302, { 'Location': urlMatch[1] });
-                                            res.end();
-                                            return;
-                                        }
-
-                                        res.writeHead(204);
-                                        res.end();
-                                    });
-                                    return;
-                                }
-
-                                const contentType = getContentType(`.${imageExt}`);
-                                if (contentType === null) {
-                                    res.writeHead(204);
-                                    res.end();
-                                    return;
-                                }
-
-                                streamBinaryFile(req, res, imagePath, contentType, fileStats);
-                            });
-                        } catch (parseErr) {
-                            console.error('Error parsing JSON:', parseErr);
-                            res.writeHead(500, {'Content-Type': 'text/plain'});
-                            res.end('Error parsing JSON');
-                        }
-                    }
-                });
-            } else {
-                // 新增：缓存验证头
-                const ext = path.extname(filePath).toLowerCase();
-                const contentType = getContentType(ext);
-                if (contentType === null) {
-                    res.writeHead(204);
-                    res.end();
-                    return;
-                }
-
-                if (ext === '.url') {
-                    fs.readFile(filePath, (readErr, data) => {
-                        if (readErr) {
-                            res.writeHead(500, {'Content-Type': 'text/plain'});
-                            res.end('Internal Server Error');
-                            return;
-                        }
-
-                        const content = data.toString('utf8');
-                        const urlMatch = content.match(/URL=(.+)/i);
-                        if (urlMatch && urlMatch[1]) {
-                            res.writeHead(302, { 'Location': urlMatch[1] });
-                            res.end();
-                            return;
-                        }
-
-                        res.writeHead(204);
-                        res.end();
-                    });
-                    return;
-                }
-
-                streamBinaryFile(req, res, filePath, contentType, stats, 'public, max-age=604800');
+            if (!res.writableEnded) {
+                res.end('Internal Server Error');
             }
         });
     });

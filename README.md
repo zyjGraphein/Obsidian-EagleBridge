@@ -4,7 +4,7 @@
 
 This is a sample plugin for Obsidian, designed to integrate Obsidian with the Eagle software.
 
-[eagle](https://eagle.cool) is a powerful attachment management software that allows for easy management of large quantities of images, videos, and audio materials, suitable for various scenarios such as collection, organization, and search. It supports Windows systems.
+[eagle](https://eagle.cool) is a powerful attachment management software that allows for easy management of large quantities of images, videos, and audio materials, suitable for various scenarios such as collection, organization, and search. EagleBridge is intended for desktop vaults on Windows and macOS.
 
 ## Features Overview
 
@@ -28,7 +28,11 @@ This plugin includes the following functionalities:
 
 1. **Configure the Listening Port**: Set a four-digit, complex value between 1000 and 9999 (e.g., 6060) to avoid conflicts with common port numbers. Once set, it is recommended not to change it to ensure stable attachment links.
 
-2. **Set Eagle Library Location**: Select the library in the top left corner of the Eagle software and copy its path, for example: `D:\onedrive\eagle\Library`.
+2. **Set Eagle Library Location**: Select the library in the top left corner of Eagle and copy its library path. Examples:
+   Windows: `D:\onedrive\eagle\Library.library`
+   macOS: `/Users/you/Pictures/Eagle/Library.library`
+
+3. **Add Multiple Library Paths If Needed**: If the same vault is used across multiple devices, add each device's Eagle library path in settings. The plugin will automatically use the first existing path.
 
 You need to restart Obsidian after completing these configurations, and then you can start using the plugin.
 
@@ -79,7 +83,6 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 ## To-Do List
 
 - [x] Support embedded previews for various file formats (e.g., PDF, MP4, PSD, OBJ, etc.)
-- [ ] Add support for macOS.
 - [ ] Support updating position when dragging.
 - [ ] When exporting, replace all attachment links and export all attachments to a folder.
 

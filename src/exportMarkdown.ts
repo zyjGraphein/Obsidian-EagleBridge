@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { resolveEagleItemById } from './eagleItemResolver';
 import type MyPlugin from './main';
 import type { MarkdownExportFormat } from './setting';
 
@@ -404,104 +405,29 @@ function collectMarkdownLinkMatches(content: string): EagleMarkdownLinkMatch[] {
 }
 
 async function resolveEagleItem(itemId: string, libraryPath: string): Promise<ResolvedEagleItem | null> {
-	const infoDirPath = path.join(path.resolve(libraryPath), 'images', `${itemId}.info`);
-	const metadataPath = path.join(infoDirPath, 'metadata.json');
-
-	if (!(await pathExists(metadataPath))) {
+	const resolvedItem = await resolveEagleItemById(libraryPath, itemId);
+	if (!resolvedItem) {
 		return null;
 	}
 
-	let metadata: { name?: string; ext?: string } = {};
-	try {
-		metadata = JSON.parse(await fs.promises.readFile(metadataPath, 'utf8'));
-	} catch {
-		return null;
+	const exportBaseName = sanitizeFileName(resolvedItem.sourceFileName || resolvedItem.expectedFileName) || itemId;
+	if (resolvedItem.externalUrl) {
+		return {
+			itemId,
+			exportBaseName,
+			externalUrl: resolvedItem.externalUrl,
+		};
 	}
 
-	const rawName = normalizeMetadataPart(metadata.name) || itemId;
-	const rawExt = normalizeMetadataPart(metadata.ext);
-	const exportBaseName = sanitizeFileName(rawExt ? `${rawName}.${rawExt}` : rawName) || itemId;
-	const expectedFilePath = rawExt
-		? path.join(infoDirPath, `${rawName}.${rawExt}`)
-		: path.join(infoDirPath, rawName);
-
-	if (rawExt?.toLowerCase() === 'url') {
-		const targetUrl = await readShortcutUrl(expectedFilePath);
-		if (targetUrl) {
-			return {
-				itemId,
-				exportBaseName,
-				externalUrl: targetUrl,
-			};
-		}
-	}
-
-	const sourceFilePath = await resolveSourceFilePath(infoDirPath, expectedFilePath, rawName, rawExt);
-	if (!sourceFilePath) {
+	if (!resolvedItem.sourceFilePath) {
 		return null;
 	}
 
 	return {
 		itemId,
-		exportBaseName: sanitizeFileName(path.basename(sourceFilePath)) || exportBaseName,
-		sourceFilePath,
+		exportBaseName,
+		sourceFilePath: resolvedItem.sourceFilePath,
 	};
-}
-
-async function resolveSourceFilePath(
-	infoDirPath: string,
-	expectedFilePath: string,
-	rawName: string,
-	rawExt?: string,
-): Promise<string | null> {
-	if (await pathExists(expectedFilePath)) {
-		return expectedFilePath;
-	}
-
-	const dirEntries = await fs.promises.readdir(infoDirPath, { withFileTypes: true });
-	const fileEntries = dirEntries.filter((entry) => entry.isFile() && entry.name.toLowerCase() !== 'metadata.json');
-	if (fileEntries.length === 0) {
-		return null;
-	}
-
-	const exactNameMatch = fileEntries.find((entry) => entry.name.toLowerCase() === path.basename(expectedFilePath).toLowerCase());
-	if (exactNameMatch) {
-		return path.join(infoDirPath, exactNameMatch.name);
-	}
-
-	if (rawExt) {
-		const extMatch = fileEntries.find((entry) => path.extname(entry.name).toLowerCase() === `.${rawExt.toLowerCase()}`);
-		if (extMatch) {
-			return path.join(infoDirPath, extMatch.name);
-		}
-	}
-
-	const nameMatch = fileEntries.find((entry) => path.basename(entry.name, path.extname(entry.name)).toLowerCase() === rawName.toLowerCase());
-	if (nameMatch) {
-		return path.join(infoDirPath, nameMatch.name);
-	}
-
-	const sizedEntries = await Promise.all(fileEntries.map(async (entry) => ({
-		name: entry.name,
-		stats: await fs.promises.stat(path.join(infoDirPath, entry.name)),
-	})));
-
-	sizedEntries.sort((left, right) => right.stats.size - left.stats.size);
-	return sizedEntries.length > 0 ? path.join(infoDirPath, sizedEntries[0].name) : null;
-}
-
-async function readShortcutUrl(filePath: string): Promise<string | null> {
-	if (!(await pathExists(filePath))) {
-		return null;
-	}
-
-	try {
-		const content = await fs.promises.readFile(filePath, 'utf8');
-		const match = content.match(/URL=(.+)/i);
-		return match?.[1]?.trim() || null;
-	} catch {
-		return null;
-	}
 }
 
 async function writeBundleToFolder(bundle: PreparedMarkdownExport, file: TFile, outputFolderPath: string): Promise<void> {
@@ -638,15 +564,6 @@ function sanitizePathSegment(value: string): string {
 
 function formatMarkdownDestination(relativePath: string): string {
 	return /[\s()]/.test(relativePath) ? `<${relativePath}>` : relativePath;
-}
-
-function normalizeMetadataPart(value: unknown): string | undefined {
-	if (typeof value !== 'string') {
-		return undefined;
-	}
-
-	const trimmedValue = value.trim();
-	return trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
 function ensureZipExtension(targetPath: string): string {
