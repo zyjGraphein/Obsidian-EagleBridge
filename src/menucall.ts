@@ -68,6 +68,19 @@ function isEagleInfoUrl(url: string): boolean {
     return /^http:\/\/localhost:\d+\/images\/[^/\s?#]+\.info$/i.test(url);
 }
 
+export interface EagleBridgeMenuContext {
+	url: string;
+	mode: 'source' | 'preview';
+	targetPos?: number | null;
+	host?: string;
+}
+
+export interface EagleBridgeIntegrationApiV1 {
+	version: 1;
+	canHandleUrl(url: string): boolean;
+	appendContextMenuItems(menu: Menu, context: EagleBridgeMenuContext): Promise<boolean>;
+}
+
 async function resolveLocalFilePath(plugin: MyPlugin, itemId: string): Promise<string | null> {
     const libraryPath = plugin.settings.libraryPath.trim();
     if (!libraryPath) {
@@ -134,14 +147,11 @@ async function openDeleteAttachmentDialog(
 export function handleLinkClick(plugin: MyPlugin, event: MouseEvent, url: string) {
 	const menu = new Menu();
 	const inPreview = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
-	if (inPreview) {
-		addEagleImageMenuPreviewMode(plugin, menu, url, event);
-	} else {
-		addEagleImageMenuSourceMode(plugin, menu, url, event);
-	}
-	registerEscapeButton(plugin, menu);
-	let offset = 0;
-	menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
+	void showEagleImageContextMenu(plugin, menu, {
+		url,
+		mode: inPreview ? 'preview' : 'source',
+		host: 'native',
+	}, event);
 }
 
 export function eagleImageContextMenuCall(this: MyPlugin, event: MouseEvent) {
@@ -157,15 +167,11 @@ export function eagleImageContextMenuCall(this: MyPlugin, event: MouseEvent) {
 	const url = img.src;
 	const menu = new Menu();
 	const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() == "preview";
-	if (inPreview) {
-		addEagleImageMenuPreviewMode(this, menu, url, event);
-	} else {
-		addEagleImageMenuSourceMode(this, menu, url, event);
-	}
-	registerEscapeButton(this, menu);
-	let offset = 0;
-	if (!inPreview && (inTable || inCallout)) offset = -138;
-	menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
+	void showEagleImageContextMenu(this, menu, {
+		url,
+		mode: inPreview ? 'preview' : 'source',
+		host: 'native',
+	}, event, !inPreview && (inTable || inCallout) ? -138 : 0);
 }
 
 function resolveEagleUrlFromContextMenuEvent(plugin: MyPlugin, event: MouseEvent): { url: string; targetPos: number | null } | null {
@@ -228,13 +234,12 @@ export function eagleLinkContextMenuCall(this: MyPlugin, event: MouseEvent) {
 
     const menu = new Menu();
     const inPreview = this.app.workspace.getActiveViewOfType(MarkdownView)?.getMode() === "preview";
-    if (inPreview) {
-        void addEagleImageMenuPreviewMode(this, menu, resolved.url, event);
-    } else {
-        void addEagleImageMenuSourceMode(this, menu, resolved.url, event, resolved.targetPos);
-    }
-    registerEscapeButton(this, menu);
-    menu.showAtPosition({ x: event.pageX, y: event.pageY });
+    void showEagleImageContextMenu(this, menu, {
+        url: resolved.url,
+        mode: inPreview ? 'preview' : 'source',
+        targetPos: resolved.targetPos,
+        host: 'native',
+    }, event);
 }
 
 export function registerEscapeButton(plugin: MyPlugin, menu: Menu, document: Document = activeDocument) {
@@ -254,7 +259,35 @@ export function registerEscapeButton(plugin: MyPlugin, menu: Menu, document: Doc
 	);
 }
 
-export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu, oburl: string, event: MouseEvent) {
+export function createEagleBridgeIntegrationApi(plugin: MyPlugin): EagleBridgeIntegrationApiV1 {
+	return {
+		version: 1,
+		canHandleUrl: (url: string) => isEagleInfoUrl(url),
+		appendContextMenuItems: async (menu: Menu, context: EagleBridgeMenuContext) => {
+			if (!isEagleInfoUrl(context.url)) return false;
+			if (context.mode === 'preview') {
+				await appendEagleImageMenuPreviewItems(plugin, menu, context.url);
+				return true;
+			}
+			await appendEagleImageMenuSourceItems(plugin, menu, context.url, context);
+			return true;
+		},
+	};
+}
+
+async function showEagleImageContextMenu(
+	plugin: MyPlugin,
+	menu: Menu,
+	context: EagleBridgeMenuContext,
+	event: MouseEvent,
+	offset = 0,
+) {
+	await plugin.integrationApi.appendContextMenuItems(menu, context);
+	registerEscapeButton(plugin, menu);
+	menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
+}
+
+async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, oburl: string) {
 	const imageInfo = await fetchImageInfo(oburl);
 
     if (imageInfo) {
@@ -438,23 +471,27 @@ export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu,
         // 其他菜单项可以继续使用 { id, name, ext } 数据
     }
 
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("trash-2")
-                .setTitle("Delete attachment")
-                .onClick(async () => {
-                    await openDeleteAttachmentDialog(plugin, oburl, {
-                        contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
-                        currentLinkMode: 'current-file-links',
-                        currentLinkFile: getActiveReferenceFile(plugin),
-                    });
-                })
-        );
-	menu.showAtPosition({ x: event.pageX, y: event.pageY });
+    menu.addItem((item: MenuItem) =>
+        item
+            .setIcon("trash-2")
+            .setTitle("Delete attachment")
+            .onClick(async () => {
+                await openDeleteAttachmentDialog(plugin, oburl, {
+                    contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
+                    currentLinkMode: 'current-file-links',
+                    currentLinkFile: getActiveReferenceFile(plugin),
+                });
+            })
+    );
 }
 
-export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, url: string, event: MouseEvent, targetPos?: number | null) {
-	await addEagleImageMenuPreviewMode(plugin, menu, url, event);
+async function appendEagleImageMenuSourceItems(
+	plugin: MyPlugin,
+	menu: Menu,
+	url: string,
+	context: EagleBridgeMenuContext,
+) {
+	await appendEagleImageMenuPreviewItems(plugin, menu, url);
 
     menu.addItem((item: MenuItem) =>
         item
@@ -500,18 +537,11 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
             .setTitle("Clear markdown link")
             .onClick(() => {
                 try {
-                    // Util.handlerDelFile(FileBaseName, currentMd, this);
-                    const target = getMouseEventTarget(event);
-                    const editor = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-                    if (!editor) {
-                        throw new Error('NO_EDITOR');
+                    const targetPos = resolveTargetPosForContext(plugin, context);
+                    if (typeof targetPos !== 'number') {
+                        throw new Error('NO_TARGET_POS');
                     }
-                    const editorView = (editor as typeof editor & { cm?: EditorView }).cm;
-                    if (!editorView) {
-                        throw new Error('NO_EDITOR_VIEW');
-                    }
-                    const target_pos = typeof targetPos === 'number' ? targetPos : editorView.posAtDOM(target);
-                    deleteCurTargetLink(url, plugin, target_pos);
+                    deleteCurTargetLink(url, plugin, targetPos);
                 } catch {
                     new Notice("Error, could not clear the file!");
                 }
@@ -525,13 +555,29 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
                 await openDeleteAttachmentDialog(plugin, url, {
                     contextTitle: '将删除 Eagle 附件，并可选择是否删除当前链接或全部链接',
                     currentLinkMode: 'precise-current-link',
-                    currentLinkTargetPos: typeof targetPos === 'number' ? targetPos : null,
+                    currentLinkTargetPos: typeof context.targetPos === 'number' ? context.targetPos : null,
                     currentLinkFile: getActiveReferenceFile(plugin),
                 });
             })
     );
-	menu.showAtPosition({ x: event.pageX, y: event.pageY });
 } 
+
+export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu, oburl: string, event: MouseEvent) {
+	await showEagleImageContextMenu(plugin, menu, {
+		url: oburl,
+		mode: 'preview',
+		host: 'native',
+	}, event);
+}
+
+export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, url: string, event: MouseEvent, targetPos?: number | null) {
+	await showEagleImageContextMenu(plugin, menu, {
+		url,
+		mode: 'source',
+		targetPos,
+		host: 'native',
+	}, event);
+}
 
 // 修改eagle属性中的annotation,url,tags
 class ModifyPropertiesModal extends Modal {
@@ -686,10 +732,30 @@ export async function fetchImageInfo(url: string): Promise<{ id: string, name: s
 	return null;
 }
 
-export const getMouseEventTarget = (event: MouseEvent): HTMLElement => {
-    event.preventDefault();
-    const target = event.target as HTMLElement;
-    return target;
+function resolveTargetPosForContext(plugin: MyPlugin, context: EagleBridgeMenuContext): number | null {
+	if (typeof context.targetPos === 'number') {
+		return context.targetPos;
+	}
+
+	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeView || activeView.getMode() === 'preview') {
+		return null;
+	}
+
+	const editorView = (activeView.editor as typeof activeView.editor & { cm?: EditorView }).cm;
+	if (!editorView) {
+		return null;
+	}
+
+	const doc = editorView.state.doc;
+	for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber++) {
+		const line = doc.line(lineNumber);
+		const match = new RegExp(`!?\\[[^\\]]*\\]\\(${escapeRegExp(context.url)}[^)]*\\)`, 'g').exec(line.text);
+		if (!match || typeof match.index !== 'number') continue;
+		return line.from + match.index;
+	}
+
+	return null;
 }
 
 export function deleteCurTargetLink(

@@ -12,7 +12,7 @@ import {
 import { existsSync } from 'fs';
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
-import { handleLinkClick, eagleImageContextMenuCall, eagleLinkContextMenuCall, registerEscapeButton, addEagleImageMenuSourceMode, addEagleImageMenuPreviewMode, fetchImageInfo } from './menucall';
+import { handleLinkClick, eagleImageContextMenuCall, eagleLinkContextMenuCall, createEagleBridgeIntegrationApi, type EagleBridgeIntegrationApiV1 } from './menucall';
 import { isAltTextImage, isURL, isLocalHostLink} from './embed';
 import { embedManager } from './embed';
 import { embedField } from './embed-state-field';
@@ -40,6 +40,7 @@ export function setDebug(value: boolean) {
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 	eagleReferenceIndex: EagleReferenceIndex;
+	integrationApi!: EagleBridgeIntegrationApiV1;
 	private autoTagSyncStates = new Map<string, FileTagSyncState>();
 	private autoTagSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -47,6 +48,7 @@ export default class MyPlugin extends Plugin {
 		console.log('加载 Eagle-Embed 插件');
 		
 		await this.loadSettings();
+		this.integrationApi = createEagleBridgeIntegrationApi(this);
 		this.eagleReferenceIndex = new EagleReferenceIndex(this);
 		this.register(() => {
 			this.eagleReferenceIndex.destroy();
