@@ -75,10 +75,14 @@ export interface EagleBridgeMenuContext {
 	host?: string;
 }
 
+export type EagleBridgeTransferKind = 'paste' | 'drop';
+
 export interface EagleBridgeIntegrationApiV1 {
 	version: 1;
 	canHandleUrl(url: string): boolean;
 	appendContextMenuItems(menu: Menu, context: EagleBridgeMenuContext): Promise<boolean>;
+	canResolveMarkdownTransfer?: (data: DataTransfer, kind: EagleBridgeTransferKind) => boolean;
+	resolveMarkdownTransfer?: (data: DataTransfer, kind: EagleBridgeTransferKind) => Promise<string[] | null>;
 }
 
 async function resolveLocalFilePath(plugin: MyPlugin, itemId: string): Promise<string | null> {

@@ -1,6 +1,6 @@
 import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
 import { startServer, refreshServer, stopServer } from './server';
-import { handlePasteEvent, handleDropEvent, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
+import { canResolveMarkdownTransfer, handlePasteEvent, handleDropEvent, resolveMarkdownTransfer, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
 import * as path from 'path';
@@ -48,7 +48,11 @@ export default class MyPlugin extends Plugin {
 		console.log('加载 Eagle-Embed 插件');
 		
 		await this.loadSettings();
-		this.integrationApi = createEagleBridgeIntegrationApi(this);
+		this.integrationApi = {
+			...createEagleBridgeIntegrationApi(this),
+			canResolveMarkdownTransfer: (data, kind) => canResolveMarkdownTransfer(data, kind, this),
+			resolveMarkdownTransfer: (data, kind) => resolveMarkdownTransfer(data, kind, this),
+		};
 		this.eagleReferenceIndex = new EagleReferenceIndex(this);
 		this.register(() => {
 			this.eagleReferenceIndex.destroy();

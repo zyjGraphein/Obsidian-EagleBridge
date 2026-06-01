@@ -39,6 +39,7 @@ const VIDEO_EXTENSIONS = new Set([
 
 export type UploadSurface = 'markdown' | 'canvas';
 type UploadContentType = 'image' | 'video' | 'website' | 'other';
+export type MarkdownTransferKind = 'paste' | 'drop';
 
 export interface ResolvedEagleLink {
     url: string;
@@ -218,6 +219,31 @@ export function shouldConvertTransferFilesToEagleLinks(files: File[], pluginInst
         && files.every((file) => shouldConvertTransferFileToEagleLink(file, pluginInstance, surface));
 }
 
+export function canResolveMarkdownTransfer(
+    dataTransfer: DataTransfer | null | undefined,
+    kind: MarkdownTransferKind,
+    pluginInstance: MyPlugin,
+): boolean {
+    if (!dataTransfer) {
+        return false;
+    }
+
+    const transferFiles = getTransferFiles(dataTransfer);
+    if (kind === 'drop') {
+        return shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown');
+    }
+
+    const clipboardText = dataTransfer.getData('text/plain')?.trim() || '';
+    const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown');
+    const shouldHandleUrl = Boolean(
+        clipboardText
+        && isHttpUrl(clipboardText)
+        && !clipboardText.startsWith('http://localhost')
+        && shouldUploadExternalUrl(pluginInstance, 'markdown'),
+    );
+    return shouldHandleFiles || shouldHandleUrl;
+}
+
 export function shouldUploadExternalUrl(pluginInstance: MyPlugin, surface: UploadSurface): boolean {
     return isUploadSurfaceEnabled(surface, pluginInstance)
         && isUploadContentEnabled('website', pluginInstance);
@@ -364,6 +390,51 @@ export async function resolveUrlToEagleLink(url: string, pluginInstance: MyPlugi
     };
 }
 
+export async function resolveMarkdownTransfer(
+    dataTransfer: DataTransfer | null | undefined,
+    kind: MarkdownTransferKind,
+    pluginInstance: MyPlugin,
+): Promise<string[] | null> {
+    if (!dataTransfer || !canResolveMarkdownTransfer(dataTransfer, kind, pluginInstance)) {
+        return null;
+    }
+
+    if (kind === 'drop') {
+        const transferFiles = getTransferFiles(dataTransfer);
+        const embeds: string[] = [];
+        for (const file of transferFiles) {
+            const filePath = await getTransferFilePath(file);
+            const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
+            embeds.push(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
+        }
+        return embeds.length > 0 ? embeds : null;
+    }
+
+    const clipboardText = dataTransfer.getData('text/plain')?.trim() || '';
+    const clipboardFiles = getTransferFiles(dataTransfer);
+    const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(clipboardFiles, pluginInstance, 'markdown');
+
+    if (clipboardFiles.length > 0 && !shouldHandleFiles) {
+        return null;
+    }
+
+    if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
+        if (!shouldUploadExternalUrl(pluginInstance, 'markdown')) {
+            return null;
+        }
+        const resolvedLink = await resolveUrlToEagleLink(clipboardText, pluginInstance);
+        return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize)];
+    }
+
+    if (!shouldHandleFiles || clipboardFiles.length === 0) {
+        return null;
+    }
+
+    const filePath = await getTransferFilePath(clipboardFiles[0]);
+    const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
+    return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize)];
+}
+
 export async function handlePasteEvent(
     clipboardEvent: ClipboardEvent,
     editor: Editor,
@@ -375,53 +446,23 @@ export async function handlePasteEvent(
     }
 
     const clipboardData = clipboardEvent.clipboardData;
-    const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
-    const clipboardFiles = getTransferFiles(clipboardData);
-    const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(clipboardFiles, pluginInstance, 'markdown');
-    const shouldHandleUrl = Boolean(
-        clipboardText &&
-        isHttpUrl(clipboardText) &&
-        !clipboardText.startsWith('http://localhost') &&
-        shouldUploadExternalUrl(pluginInstance, 'markdown')
-    );
-
-    if (shouldHandleFiles || shouldHandleUrl) {
-        consumeHandledEvent(clipboardEvent);
-    }
-
-    let filePath = '';
-
-    if (clipboardFiles.length > 0 && !shouldHandleFiles) {
+    if (!canResolveMarkdownTransfer(clipboardData, 'paste', pluginInstance)) {
         return;
     }
 
-    if (shouldHandleFiles) {
-        filePath = await getTransferFilePath(clipboardFiles[0]);
-    }
-
-    if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
-        if (!shouldUploadExternalUrl(pluginInstance, 'markdown')) {
-            return;
-        }
-
-        try {
-            const resolvedLink = await resolveUrlToEagleLink(clipboardText, pluginInstance);
-            editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
-            new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
-        } catch (error) {
-            print(`URL upload failed: ${toErrorMessage(error)}`);
-            new Notice('URL upload failed');
-        }
-        return;
-    }
-
-    if (!filePath) {
-        return;
-    }
+    consumeHandledEvent(clipboardEvent);
 
     try {
-        const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
-        editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
+        const embeds = await resolveMarkdownTransfer(clipboardData, 'paste', pluginInstance);
+        if (!embeds || embeds.length === 0) {
+            return;
+        }
+        editor.replaceSelection(embeds.join('\n'));
+        const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
+        if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
+            new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
+            return;
+        }
         new Notice('Eagle link converted');
     } catch (error) {
         if (toErrorMessage(error) === 'NON_EAGLE_FILE') {
@@ -493,34 +534,27 @@ export async function handleDropEvent(
         return;
     }
 
-    const transferFiles = Array.from(dropEvent.dataTransfer?.files ?? []);
-    if (transferFiles.length === 0) {
-        return;
-    }
-
-    if (!shouldConvertTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown')) {
+    if (!canResolveMarkdownTransfer(dropEvent.dataTransfer, 'drop', pluginInstance)) {
         return;
     }
 
     syncEditorCursorToDragEvent(editor, dropEvent);
     consumeHandledEvent(dropEvent);
 
-    for (const file of transferFiles) {
-        try {
-            const filePath = await getTransferFilePath(file);
-            print(`Drag file path: ${filePath}`);
-
-            const resolvedLink = await resolveFilePathToEagleLink(filePath, pluginInstance);
-            editor.replaceSelection(createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize));
-            new Notice('Eagle link converted');
-        } catch (error) {
-            if (toErrorMessage(error) === 'NON_EAGLE_FILE') {
-                new Notice('Non-Eagle link');
-                continue;
-            }
-
-            print(`File upload failed: ${toErrorMessage(error)}`);
-            new Notice('File upload failed, check if Eagle is running');
+    try {
+        const embeds = await resolveMarkdownTransfer(dropEvent.dataTransfer, 'drop', pluginInstance);
+        if (!embeds || embeds.length === 0) {
+            return;
         }
+        editor.replaceSelection(embeds.join('\n'));
+        new Notice('Eagle link converted');
+    } catch (error) {
+        if (toErrorMessage(error) === 'NON_EAGLE_FILE') {
+            new Notice('Non-Eagle link');
+            return;
+        }
+
+        print(`File upload failed: ${toErrorMessage(error)}`);
+        new Notice('File upload failed, check if Eagle is running');
     }
 }
