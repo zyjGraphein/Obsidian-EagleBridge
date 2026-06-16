@@ -12,6 +12,7 @@ import {
 } from 'obsidian';
 import type MyPlugin from './main';
 import { isPathInsideDirectory } from './eaglePaths';
+import { findLibraryProfileByFilePath } from './libraryProfiles';
 import { resolveFilePathToEagleLink, type ResolvedEagleLink } from './urlHandler';
 
 const NON_ATTACHMENT_EXTENSIONS = new Set(['md', 'canvas', 'base']);
@@ -89,7 +90,7 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 
 	let plan: AttachmentBatchPlan;
 	try {
-		plan = await buildAttachmentBatchPlan(plugin.app, activeFile, plugin.settings.libraryPath);
+		plan = await buildAttachmentBatchPlan(plugin.app, activeFile, plugin);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		if (message === 'FILE_CACHE_UNAVAILABLE') {
@@ -215,7 +216,7 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 async function buildAttachmentBatchPlan(
 	app: App,
 	file: TFile,
-	libraryPath: string,
+	plugin: MyPlugin,
 ): Promise<AttachmentBatchPlan> {
 	const originalContent = await app.vault.read(file);
 	const fileCache = app.metadataCache.getFileCache(file);
@@ -251,9 +252,7 @@ async function buildAttachmentBatchPlan(
 			otherMarkdownReferences: getOtherMarkdownReferences(app, file, occurrence.sourceFile),
 			otherCanvasReferences: canvasReferenceIndex.get(occurrence.sourceFile.path) ?? [],
 			remainingCurrentReferences: 0,
-			sourceAlreadyInEagleLibrary: libraryPath
-				? isPathInsideDirectory(absolutePath, libraryPath)
-				: false,
+			sourceAlreadyInEagleLibrary: Boolean(findLibraryProfileByFilePath(plugin.settings, absolutePath)),
 		});
 	}
 

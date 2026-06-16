@@ -3,9 +3,8 @@ import type { AllCanvasNodeData, CanvasData, CanvasLinkData } from 'obsidian/can
 import MyPlugin, { print } from './main';
 import {
     getTransferFiles,
-    getTransferFilePath,
     type ResolvedEagleLink,
-    resolveFilePathToEagleLink,
+    resolveTransferFilesToEagleLinks,
     resolveUrlToEagleLink,
     shouldConvertTransferFilesToEagleLinks,
     shouldUploadExternalUrl,
@@ -207,13 +206,24 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
     }
 
     if (shouldHandleFiles) {
-        for (const file of clipboardFiles) {
+        const resolvedLinks = await resolveTransferFilesToEagleLinks(clipboardFiles, plugin, 'canvas');
+        if (!resolvedLinks) {
+            return;
+        }
+
+        for (const resolvedLink of resolvedLinks) {
             try {
-                const filePath = await getTransferFilePath(file);
-                const resolvedLink = await resolveFilePathToEagleLink(filePath, plugin);
                 await appendCanvasLinkNode(plugin, context.file, context.view, resolvedLink);
                 new Notice(`Canvas node added: ${resolvedLink.fileName}`);
             } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (message === 'UPLOAD_TARGET_CANCELLED') {
+                    return;
+                }
+                if (message === 'NO_UPLOAD_TARGET') {
+                    new Notice('No available Eagle library profile for upload.');
+                    return;
+                }
                 new Notice('Canvas import failed, check if Eagle is running');
             }
         }
@@ -234,6 +244,14 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
         await appendCanvasLinkNode(plugin, context.file, context.view, resolvedLink);
         new Notice(`Canvas node added: ${resolvedLink.fileName}`);
     } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message === 'UPLOAD_TARGET_CANCELLED') {
+            return;
+        }
+        if (message === 'NO_UPLOAD_TARGET') {
+            new Notice('No available Eagle library profile for upload.');
+            return;
+        }
         new Notice('URL upload failed');
     }
 }
@@ -256,13 +274,24 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
 
         consumeHandledEvent(event);
 
-        for (const file of transferFiles) {
+        const resolvedLinks = await resolveTransferFilesToEagleLinks(transferFiles, plugin, 'canvas');
+        if (!resolvedLinks) {
+            return;
+        }
+
+        for (const resolvedLink of resolvedLinks) {
             try {
-                const filePath = await getTransferFilePath(file);
-                const resolvedLink = await resolveFilePathToEagleLink(filePath, plugin);
                 await appendCanvasLinkNode(plugin, context.file, context.view, resolvedLink);
                 new Notice(`Canvas node added: ${resolvedLink.fileName}`);
             } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (message === 'UPLOAD_TARGET_CANCELLED') {
+                    return;
+                }
+                if (message === 'NO_UPLOAD_TARGET') {
+                    new Notice('No available Eagle library profile for upload.');
+                    return;
+                }
                 new Notice('Canvas import failed, check if Eagle is running');
             }
         }
@@ -282,6 +311,14 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
         await appendCanvasLinkNode(plugin, context.file, context.view, resolvedLink);
         new Notice(`Canvas node added: ${resolvedLink.fileName}`);
     } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message === 'UPLOAD_TARGET_CANCELLED') {
+            return;
+        }
+        if (message === 'NO_UPLOAD_TARGET') {
+            new Notice('No available Eagle library profile for upload.');
+            return;
+        }
         new Notice('URL upload failed');
     }
 }

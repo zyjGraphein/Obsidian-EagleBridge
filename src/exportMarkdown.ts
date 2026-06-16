@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { resolveEagleItemById } from './eagleItemResolver';
+import { extractEagleLinkTarget, findLibraryProfileByPort } from './libraryProfiles';
 import type MyPlugin from './main';
 import type { MarkdownExportFormat } from './setting';
 
@@ -21,6 +22,7 @@ interface EagleMarkdownLinkMatch {
 	length: number;
 	prefix: string;
 	label: string;
+	port: number;
 	itemId: string;
 	suffix: string;
 }
@@ -316,18 +318,19 @@ async function prepareMarkdownExport(plugin: MyPlugin, file: TFile): Promise<Pre
 		};
 	}
 
-	if (!plugin.settings.libraryPath) {
+	if (!plugin.settings.libraryProfiles.length) {
 		throw new Error('EAGLE_LIBRARY_PATH_NOT_SET');
 	}
 
-	const itemIds = Array.from(new Set(matches.map((match) => match.itemId)));
-	const resolvedPairs = await Promise.all(itemIds.map(async (itemId) => {
-		const resolvedItem = await resolveEagleItem(itemId, plugin.settings.libraryPath);
-		return [itemId, resolvedItem] as [string, ResolvedEagleItem | null];
+	const itemKeys = Array.from(new Set(matches.map((match) => `${match.port}:${match.itemId}`)));
+	const resolvedPairs = await Promise.all(itemKeys.map(async (itemKey) => {
+		const [portText, itemId] = itemKey.split(':');
+		const resolvedItem = await resolveEagleItem(plugin, Number.parseInt(portText, 10), itemId);
+		return [itemKey, resolvedItem] as [string, ResolvedEagleItem | null];
 	}));
 
 	const resolvedItems = new Map<string, ResolvedEagleItem | null>(resolvedPairs);
-	const assetsByItemId = new Map<string, PreparedExportAsset>();
+	const assetsByTargetKey = new Map<string, PreparedExportAsset>();
 	const usedFileNames = new Set<string>();
 	let convertedCount = 0;
 	let unresolvedCount = 0;
@@ -339,7 +342,7 @@ async function prepareMarkdownExport(plugin: MyPlugin, file: TFile): Promise<Pre
 		transformedMarkdown += content.slice(cursor, match.index);
 		cursor = match.index + match.length;
 
-		const resolvedItem = resolvedItems.get(match.itemId);
+		const resolvedItem = resolvedItems.get(`${match.port}:${match.itemId}`);
 		if (!resolvedItem) {
 			unresolvedCount += 1;
 			transformedMarkdown += match.fullMatch;
@@ -351,7 +354,8 @@ async function prepareMarkdownExport(plugin: MyPlugin, file: TFile): Promise<Pre
 			destination = resolvedItem.externalUrl;
 			externalUrlCount += 1;
 		} else if (resolvedItem.sourceFilePath) {
-			let asset = assetsByItemId.get(match.itemId);
+			const targetKey = `${match.port}:${match.itemId}`;
+			let asset = assetsByTargetKey.get(targetKey);
 			if (!asset) {
 				const fileName = allocateUniqueFileName(resolvedItem.exportBaseName, usedFileNames);
 				asset = {
@@ -359,7 +363,7 @@ async function prepareMarkdownExport(plugin: MyPlugin, file: TFile): Promise<Pre
 					fileName,
 					sourceFilePath: resolvedItem.sourceFilePath,
 				};
-				assetsByItemId.set(match.itemId, asset);
+				assetsByTargetKey.set(targetKey, asset);
 			}
 			destination = formatMarkdownDestination(path.posix.join(ATTACHMENT_DIR_NAME, asset.fileName));
 		} else {
@@ -377,7 +381,7 @@ async function prepareMarkdownExport(plugin: MyPlugin, file: TFile): Promise<Pre
 
 	return {
 		markdown: transformedMarkdown,
-		assets: Array.from(assetsByItemId.values()),
+		assets: Array.from(assetsByTargetKey.values()),
 		convertedCount,
 		unresolvedCount,
 		externalUrlCount,
@@ -395,6 +399,7 @@ function collectMarkdownLinkMatches(content: string): EagleMarkdownLinkMatch[] {
 			length: match[0].length,
 			prefix: match[1] || '',
 			label: match[2] || '',
+			port: Number.parseInt((extractEagleLinkTarget(match[3])?.port ?? 0).toString(), 10),
 			itemId: match[4] || '',
 			suffix: match[5] || '',
 		});
@@ -404,7 +409,13 @@ function collectMarkdownLinkMatches(content: string): EagleMarkdownLinkMatch[] {
 	return matches;
 }
 
-async function resolveEagleItem(itemId: string, libraryPath: string): Promise<ResolvedEagleItem | null> {
+async function resolveEagleItem(plugin: MyPlugin, port: number, itemId: string): Promise<ResolvedEagleItem | null> {
+	const profile = findLibraryProfileByPort(plugin.settings, port);
+	const libraryPath = profile?.resolvedPath || '';
+	if (!libraryPath) {
+		return null;
+	}
+
 	const resolvedItem = await resolveEagleItemById(libraryPath, itemId);
 	if (!resolvedItem) {
 		return null;

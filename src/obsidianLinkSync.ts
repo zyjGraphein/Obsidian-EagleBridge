@@ -3,7 +3,7 @@ import * as path from 'path';
 import { App, Notice, TFile } from 'obsidian';
 import { MyPluginSettings } from './setting';
 import { print } from './main';
-import { getInfoFileIdsFromFile } from './synchronizedpagetabs';
+import { findLibraryProfileByPort, getEnabledResolvedLibraryProfiles } from './libraryProfiles';
 
 interface ObsidianLinkEntry {
 	name: string;
@@ -17,7 +17,12 @@ interface EagleMetadata {
 
 interface SyncObsidianLinkOptions {
 	notify?: boolean;
-	itemIds?: string[];
+	itemKeys?: string[];
+}
+
+interface EagleLinkTarget {
+	itemId: string;
+	port: number;
 }
 
 export async function syncCurrentPageObsidianLinkToEagle(app: App, settings: MyPluginSettings): Promise<void> {
@@ -38,9 +43,9 @@ export async function syncObsidianLinkForFile(
 ): Promise<void> {
 	const shouldNotify = options.notify !== false;
 
-	if (!settings.libraryPath) {
+	if (getEnabledResolvedLibraryProfiles(settings).length === 0) {
 		if (shouldNotify) {
-			new Notice('Eagle library path is not configured.');
+			new Notice('No available Eagle library profile is configured.');
 		}
 		return;
 	}
@@ -60,8 +65,12 @@ export async function syncObsidianLinkForFile(
 		return;
 	}
 
-	const itemIds = options.itemIds ?? await getInfoFileIdsFromFile(app, file);
-	if (itemIds.length === 0) {
+	const content = await app.vault.read(file);
+	const allTargets = extractLinkTargetsFromContent(content);
+	const targets = options.itemKeys?.length
+		? allTargets.filter((target) => options.itemKeys?.includes(`${target.port}:${target.itemId}`))
+		: allTargets;
+	if (targets.length === 0) {
 		if (shouldNotify) {
 			new Notice('No Eagle items found in the current page.');
 		}
@@ -74,10 +83,16 @@ export async function syncObsidianLinkForFile(
 	};
 
 	let updatedCount = 0;
-	for (const itemId of itemIds) {
-		const metadataPath = path.join(settings.libraryPath, 'images', `${itemId}.info`, 'metadata.json');
+	for (const target of targets) {
+		const profile = findLibraryProfileByPort(settings, target.port);
+		if (!profile?.resolvedPath) {
+			print(`Skipped unresolved Eagle profile for port ${target.port}`);
+			continue;
+		}
+
+		const metadataPath = path.join(profile.resolvedPath, 'images', `${target.itemId}.info`, 'metadata.json');
 		if (!fs.existsSync(metadataPath)) {
-			print(`Skipped missing metadata.json for Eagle item ${itemId}`);
+			print(`Skipped missing metadata.json for Eagle item ${target.itemId}`);
 			continue;
 		}
 
@@ -94,7 +109,7 @@ export async function syncObsidianLinkForFile(
 			fs.writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 			updatedCount += 1;
 		} catch (error) {
-			print(`Failed to update Obsidian metadata for Eagle item ${itemId}:`, error);
+			print(`Failed to update Obsidian metadata for Eagle item ${target.itemId}:`, error);
 		}
 	}
 
@@ -105,6 +120,25 @@ export async function syncObsidianLinkForFile(
 			new Notice('Current page link is already present in Eagle.');
 		}
 	}
+}
+
+function extractLinkTargetsFromContent(content: string): EagleLinkTarget[] {
+	const targets = new Map<string, EagleLinkTarget>();
+	const pattern = /http:\/\/localhost:(\d+)\/images\/([^/\s]+)\.info/gi;
+	let match: RegExpExecArray | null;
+
+	while ((match = pattern.exec(content)) !== null) {
+		const port = Number.parseInt(match[1] || '', 10);
+		const itemId = match[2] || '';
+		if (!Number.isFinite(port) || !itemId) {
+			continue;
+		}
+
+		targets.set(`${port}:${itemId}`, { port, itemId });
+	}
+
+	pattern.lastIndex = 0;
+	return Array.from(targets.values());
 }
 
 function getCurrentPageUid(app: App, file: TFile): string | null {

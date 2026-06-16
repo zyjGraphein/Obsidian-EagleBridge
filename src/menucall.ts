@@ -9,6 +9,8 @@ import { EditorView} from '@codemirror/view';
 import { extractEagleItemIdFromUrl } from './eagleReferenceView';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 import { resolveEagleItemById } from './eagleItemResolver';
+import { extractEagleLinkTarget, findLibraryProfileByPort } from './libraryProfiles';
+import { getItemInfoFromLibrary, switchEagleLibrary, updateItemInLibrary } from './eagleApi';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -85,8 +87,27 @@ export interface EagleBridgeIntegrationApiV1 {
 	resolveMarkdownTransfer?: (data: DataTransfer, kind: EagleBridgeTransferKind) => Promise<string[] | null>;
 }
 
-async function resolveLocalFilePath(plugin: MyPlugin, itemId: string): Promise<string | null> {
-    const libraryPath = plugin.settings.libraryPath.trim();
+function resolveProfileForUrl(plugin: MyPlugin, url: string) {
+	const target = extractEagleLinkTarget(url);
+	if (!target) {
+		return null;
+	}
+
+	const profile = findLibraryProfileByPort(plugin.settings, target.port);
+	if (!profile?.resolvedPath) {
+		return null;
+	}
+
+	return {
+		target,
+		profile,
+	};
+}
+
+async function resolveLocalFilePath(plugin: MyPlugin, itemId: string, itemUrl?: string): Promise<string | null> {
+    const linkTarget = itemUrl ? extractEagleLinkTarget(itemUrl) : null;
+    const profile = linkTarget ? findLibraryProfileByPort(plugin.settings, linkTarget.port) : null;
+    const libraryPath = profile?.resolvedPath || (!itemUrl ? plugin.settings.libraryPath.trim() : '');
     if (!libraryPath) {
         return null;
     }
@@ -292,7 +313,7 @@ async function showEagleImageContextMenu(
 }
 
 async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, oburl: string) {
-	const imageInfo = await fetchImageInfo(oburl);
+	const imageInfo = await fetchImageInfo(plugin, oburl);
 
     if (imageInfo) {
         const { id, name, ext, annotation, tags, url } = imageInfo;
@@ -343,6 +364,10 @@ async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, ob
                 .setIcon("file-symlink")
                 .setTitle("Open in eagle")
                 .onClick(async () => {
+                    const targetProfile = resolveProfileForUrl(plugin, oburl);
+                    if (targetProfile) {
+                        await switchEagleLibrary(targetProfile.profile.resolvedPath);
+                    }
                     const eagleLink = `eagle://item/${id}`;
                     navigator.clipboard.writeText(eagleLink);
                     await shell.openExternal(eagleLink);
@@ -364,7 +389,7 @@ async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, ob
                 .setIcon("square-arrow-out-up-right")
                 .setTitle("Open in the default app")
                 .onClick(async () => {
-                    const localFilePath = await resolveLocalFilePath(plugin, id);
+                    const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
                     if (!localFilePath) {
                         new Notice('Cannot find the local source file, please check Eagle library path');
                         return;
@@ -383,7 +408,7 @@ async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, ob
                 .setIcon("external-link")
                 .setTitle(getOtherAppsMenuTitle())
                 .onClick(async () => {
-                    const localFilePath = await resolveLocalFilePath(plugin, id);
+                    const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
                     if (!localFilePath) {
                         new Notice('Cannot find the local source file, please check Eagle library path');
                         return;
@@ -403,7 +428,7 @@ async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, ob
             .setIcon("copy")
             .setTitle("Copy source file")
             .onClick(async () => {
-                const localFilePath = await resolveLocalFilePath(plugin, id);
+                const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
                 if (!localFilePath) {
                     new Notice("Cannot find the local source file", 3000);
                     return;
@@ -466,7 +491,7 @@ async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, ob
                 .setIcon("wrench")
                 .setTitle("Modify properties")
                 .onClick(() => {
-                    new ModifyPropertiesModal(plugin.app, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
+                    new ModifyPropertiesModal(plugin, oburl, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
                         // new Notice(`Name changed to: ${newName}`);
                         // 在这里处理保存逻辑
                     }).open();
@@ -585,6 +610,8 @@ export async function addEagleImageMenuSourceMode(plugin: MyPlugin, menu: Menu, 
 
 // 修改eagle属性中的annotation,url,tags
 class ModifyPropertiesModal extends Modal {
+	plugin: MyPlugin;
+	itemUrl: string;
 	id: string;
 	name: string;
 	annotation: string;
@@ -592,8 +619,10 @@ class ModifyPropertiesModal extends Modal {
 	tags: string[];
 	onSubmit: (id: string, name: string, annotation: string, url: string, tags: string[]) => void;
 
-	constructor(app: App, id: string, name: string, annotation: string, url: string, tags: string[], onSubmit: (id: string, name: string, annotation: string, url: string, tags: string[]) => void) {
-		super(app);
+	constructor(plugin: MyPlugin, itemUrl: string, id: string, name: string, annotation: string, url: string, tags: string[], onSubmit: (id: string, name: string, annotation: string, url: string, tags: string[]) => void) {
+		super(plugin.app);
+		this.plugin = plugin;
+		this.itemUrl = itemUrl;
 		this.id = id;
 		this.name = name;
 		this.annotation = annotation;
@@ -641,36 +670,24 @@ class ModifyPropertiesModal extends Modal {
 			.addButton(btn => btn
 				.setButtonText('Save')
 				.setCta()
-				.onClick(() => {
-					// 构建数据对象
-					const data = {
-						id: this.id,
-						// name: this.name,
+				.onClick(async () => {
+					const targetProfile = resolveProfileForUrl(this.plugin, this.itemUrl);
+					if (!targetProfile) {
+						new Notice('Failed to resolve Eagle library for this item');
+						return;
+					}
+
+					const updated = await updateItemInLibrary(targetProfile.profile, this.id, {
 						tags: this.tags,
 						annotation: this.annotation,
 						url: this.url,
-					};
+					});
+					if (!updated) {
+						new Notice('Failed to upload data');
+						return;
+					}
 
-					// 设置请求选项
-					const requestOptions: RequestInit = {
-						method: 'POST',
-						body: JSON.stringify(data),
-						redirect: 'follow' as RequestRedirect
-					};
-
-					// 发送请求
-					fetch("http://localhost:41595/api/item/update", requestOptions)
-						.then(response => response.json())
-						.then(result => {
-							print(result);
-							new Notice('Data uploaded successfully');
-						})
-						.catch(error => {
-							print('error', error);
-							new Notice('Failed to upload data');
-						});
-
-					// 调用 onSubmit 回调
+					new Notice('Data uploaded successfully');
 					this.onSubmit(this.id, this.name, this.annotation, this.url, this.tags);
 					this.close();
 				}));
@@ -710,30 +727,28 @@ function copyFileToClipboardCMD(filePath: string) {
     }
 }
 
-export async function fetchImageInfo(url: string): Promise<{ id: string, name: string, ext: string, annotation: string, tags: string, url: string } | null> {
-	const match = url.match(/\/images\/(.*)\.info/);
-	if (match && match[1]) {
-		const requestOptions: RequestInit = {
-			method: 'GET',
-			redirect: 'follow' as RequestRedirect
-		};
-
-		try {
-			const response = await fetch(`http://localhost:41595/api/item/info?id=${match[1]}`, requestOptions);
-			const result = await response.json();
-
-			if (result.status === "success" && result.data) {
-				return result.data;
-			} else {
-				print('Failed to fetch item info');
-			}
-		} catch (error) {
-			print('Error fetching item info', error);
-		}
-	} else {
+export async function fetchImageInfo(plugin: MyPlugin, url: string): Promise<{ id: string, name: string, ext: string, annotation: string, tags: string, url: string } | null> {
+	const targetProfile = resolveProfileForUrl(plugin, url);
+	if (!targetProfile) {
 		print('Invalid image source format');
+		return null;
 	}
-	return null;
+
+	try {
+		const itemInfo = await getItemInfoFromLibrary(targetProfile.profile, targetProfile.target.itemId);
+		if (!itemInfo) {
+			print('Failed to fetch item info');
+			return null;
+		}
+
+		return {
+			...itemInfo,
+			tags: itemInfo.tags.join(', '),
+		};
+	} catch (error) {
+		print('Error fetching item info', error);
+		return null;
+	}
 }
 
 function resolveTargetPosForContext(plugin: MyPlugin, context: EagleBridgeMenuContext): number | null {

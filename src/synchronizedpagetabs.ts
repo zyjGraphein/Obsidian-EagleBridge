@@ -1,9 +1,10 @@
 import { App, Notice, TFile } from 'obsidian';
+import type { EagleLinkTarget } from './libraryProfiles';
+import { findLibraryProfileByPort } from './libraryProfiles';
+import { buildEagleLinkTargetKey, parseEagleLinkTargetsFromText } from './eagleLinks';
+import { getItemInfoFromLibrary, updateItemInLibrary } from './eagleApi';
 import { MyPluginSettings } from './setting';
 import { print } from './main';
-
-const EAGLE_ITEM_INFO_URL_REGEX = /http:\/\/localhost:\d+\/images\/([^/\s]+)\.info/gi;
-const EAGLE_API_BASE_URL = 'http://localhost:41595/api/item';
 
 export type PageTagsToEagleStrategy = 'append' | 'replace';
 
@@ -21,8 +22,8 @@ interface SyncPageTagsResult {
 export interface FileTagSyncState {
 	pageTags: string[];
 	tagSignature: string;
-	itemIds: string[];
-	itemIdsSignature: string;
+	itemTargets: EagleLinkTarget[];
+	itemTargetSignature: string;
 }
 
 export interface MergeItemTagsIntoFileResult {
@@ -49,17 +50,18 @@ export async function syncTagsForFile(
 	options: SyncPageTagsOptions = {},
 ): Promise<SyncPageTagsResult> {
 	const syncState = await getFileTagSyncState(app, file, settings);
-	return syncTagsToItemIds(syncState.pageTags, syncState.itemIds, options);
+	return syncTagsToTargets(settings, syncState.pageTags, syncState.itemTargets, options);
 }
 
-export async function syncTagsToItemIds(
+export async function syncTagsToTargets(
+	settings: MyPluginSettings,
 	pageTags: string[],
-	itemIds: string[],
+	targets: EagleLinkTarget[],
 	options: SyncPageTagsOptions = {},
 ): Promise<SyncPageTagsResult> {
 	try {
 		const strategy = options.strategy ?? 'append';
-		if (itemIds.length === 0) {
+		if (targets.length === 0) {
 			if (options.notify !== false) {
 				new Notice('No Eagle items found in the current page.');
 			}
@@ -72,18 +74,29 @@ export async function syncTagsToItemIds(
 		}
 
 		let updatedCount = 0;
-		for (const id of itemIds) {
-			const currentTags = await fetchTagsForInfoFile(id);
-			const mergedTags = strategy === 'replace'
-				? mergeUniqueStrings(pageTags)
-				: mergeUniqueStrings(currentTags, pageTags);
-
-			if (haveSameStringSet(currentTags, mergedTags)) {
+		for (const target of targets) {
+			const profile = findLibraryProfileByPort(settings, target.port);
+			if (!profile?.resolvedPath) {
 				continue;
 			}
 
-			await updateTagsForInfoFile(id, mergedTags);
-			updatedCount += 1;
+			const itemInfo = await getItemInfoFromLibrary(profile, target.itemId);
+			if (!itemInfo) {
+				continue;
+			}
+
+			const mergedTags = strategy === 'replace'
+				? mergeUniqueStrings(pageTags)
+				: mergeUniqueStrings(itemInfo.tags, pageTags);
+
+			if (haveSameStringSet(itemInfo.tags, mergedTags)) {
+				continue;
+			}
+
+			const updated = await updateItemInLibrary(profile, target.itemId, { tags: mergedTags });
+			if (updated) {
+				updatedCount += 1;
+			}
 		}
 
 		if (options.notify !== false) {
@@ -91,19 +104,19 @@ export async function syncTagsToItemIds(
 				new Notice(
 					strategy === 'replace'
 						? `Aligned current page tags to ${updatedCount} Eagle item(s).`
-						: `Appended current page tags to ${updatedCount} Eagle item(s).`
+						: `Appended current page tags to ${updatedCount} Eagle item(s).`,
 				);
 			} else {
 				new Notice(
 					strategy === 'replace'
 						? 'Current page tags are already aligned.'
-						: 'Current page tags are already appended.'
+						: 'Current page tags are already appended.',
 				);
 			}
 		}
 
 		return {
-			matchedCount: itemIds.length,
+			matchedCount: targets.length,
 			updatedCount,
 			pageTags,
 		};
@@ -127,27 +140,32 @@ export function getCurrentPageTags(app: App, settings: MyPluginSettings): string
 
 export async function getFileTagSyncState(app: App, file: TFile, settings: MyPluginSettings): Promise<FileTagSyncState> {
 	const pageTags = getPageTags(app, file, settings);
-	const itemIds = await getInfoFileIdsFromFile(app, file);
+	const itemTargets = await getEagleTargetsFromFile(app, file);
 
 	return {
 		pageTags,
 		tagSignature: buildStringSignature(pageTags),
-		itemIds,
-		itemIdsSignature: buildStringSignature(itemIds),
+		itemTargets,
+		itemTargetSignature: buildTargetSignature(itemTargets),
 	};
 }
 
-export async function getInfoFileIdsFromFile(app: App, file: TFile): Promise<string[]> {
+export async function getEagleTargetsFromFile(app: App, file: TFile): Promise<EagleLinkTarget[]> {
 	const fileContent = await app.vault.read(file);
-	return extractInfoFileIdsFromContent(fileContent);
+	return parseEagleLinkTargetsFromText(fileContent);
 }
 
-export async function getTagsForItemIds(itemIds: string[]): Promise<string[]> {
+export async function getTagsForTargets(settings: MyPluginSettings, targets: EagleLinkTarget[]): Promise<string[]> {
 	const allTags = new Set<string>();
 
-	for (const itemId of itemIds) {
-		const tags = await fetchTagsForInfoFile(itemId);
-		for (const tag of tags) {
+	for (const target of targets) {
+		const profile = findLibraryProfileByPort(settings, target.port);
+		if (!profile?.resolvedPath) {
+			continue;
+		}
+
+		const itemInfo = await getItemInfoFromLibrary(profile, target.itemId);
+		for (const tag of itemInfo?.tags ?? []) {
 			allTags.add(tag);
 		}
 	}
@@ -155,12 +173,17 @@ export async function getTagsForItemIds(itemIds: string[]): Promise<string[]> {
 	return Array.from(allTags);
 }
 
-export async function mergeItemTagsIntoFileFrontmatter(app: App, file: TFile, itemIds: string[]): Promise<MergeItemTagsIntoFileResult> {
-	if (itemIds.length === 0) {
+export async function mergeItemTagsIntoFileFrontmatter(
+	app: App,
+	file: TFile,
+	settings: MyPluginSettings,
+	targets: EagleLinkTarget[],
+): Promise<MergeItemTagsIntoFileResult> {
+	if (targets.length === 0) {
 		return { mergedTags: [], changed: false };
 	}
 
-	const itemTags = await getTagsForItemIds(itemIds);
+	const itemTags = await getTagsForTargets(settings, targets);
 	if (itemTags.length === 0) {
 		return { mergedTags: [], changed: false };
 	}
@@ -179,49 +202,9 @@ export async function mergeItemTagsIntoFileFrontmatter(app: App, file: TFile, it
 	return { mergedTags, changed };
 }
 
-async function fetchTagsForInfoFile(id: string): Promise<string[]> {
-	const requestOptions: RequestInit = {
-		method: 'GET',
-		redirect: 'follow' as RequestRedirect,
-	};
-
-	const response = await fetch(`${EAGLE_API_BASE_URL}/info?id=${encodeURIComponent(id)}`, requestOptions);
-	const result = await response.json();
-	return normalizeFrontmatterTags(result?.data?.tags);
-}
-
-async function updateTagsForInfoFile(id: string, tags: string[]) {
-	const data = {
-		id,
-		tags,
-	};
-
-	const requestOptions: RequestInit = {
-		method: 'POST',
-		body: JSON.stringify(data),
-		redirect: 'follow' as RequestRedirect,
-	};
-
-	const response = await fetch(`${EAGLE_API_BASE_URL}/update`, requestOptions);
-	const result = await response.json();
-	print(`Updated tags for ${id}:`, result);
-}
-
 function getPageTags(app: App, file: TFile, settings: MyPluginSettings): string[] {
 	const fileCache = app.metadataCache.getFileCache(file);
 	return normalizeFrontmatterTags(fileCache?.frontmatter?.tags);
-}
-
-function extractInfoFileIdsFromContent(fileContent: string): string[] {
-	const ids = new Set<string>();
-
-	let match: RegExpExecArray | null;
-	while ((match = EAGLE_ITEM_INFO_URL_REGEX.exec(fileContent)) !== null) {
-		ids.add(match[1]);
-	}
-
-	EAGLE_ITEM_INFO_URL_REGEX.lastIndex = 0;
-	return Array.from(ids);
 }
 
 function normalizeFrontmatterTags(value: unknown): string[] {
@@ -274,6 +257,13 @@ function haveSameStringSet(left: string[], right: string[]): boolean {
 function buildStringSignature(values: string[]): string {
 	return values
 		.slice()
+		.sort((left, right) => left.localeCompare(right))
+		.join('\u0001');
+}
+
+function buildTargetSignature(targets: EagleLinkTarget[]): string {
+	return targets
+		.map((target) => buildEagleLinkTargetKey(target.port, target.itemId))
 		.sort((left, right) => left.localeCompare(right))
 		.join('\u0001');
 }

@@ -1,5 +1,5 @@
 import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
-import { startServer, refreshServer, stopServer } from './server';
+import { refreshServers, stopServers } from './server';
 import { canResolveMarkdownTransfer, handlePasteEvent, handleDropEvent, resolveMarkdownTransfer, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
@@ -9,8 +9,7 @@ import {
 	addCommandSyncCurrentPageObsidianLink,
 	addCommandUploadCurrentMarkdownAttachments,
 } from "./addCommand-config";
-import { existsSync } from 'fs';
-import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
+import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeExternalUploadMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
 import { handleLinkClick, eagleImageContextMenuCall, eagleLinkContextMenuCall, createEagleBridgeIntegrationApi, type EagleBridgeIntegrationApiV1 } from './menucall';
 import { isAltTextImage, isURL, isLocalHostLink} from './embed';
@@ -18,10 +17,11 @@ import { embedManager } from './embed';
 import { embedField } from './embed-state-field';
 import { Extension } from "@codemirror/state";
 import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHandler';
-import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToItemIds } from './synchronizedpagetabs';
+import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToTargets } from './synchronizedpagetabs';
 import { syncObsidianLinkForFile } from './obsidianLinkSync';
 import { registerMarkdownExportFileMenu } from './exportMarkdown';
 import { EagleReferenceIndex, EagleReferenceView, EAGLE_REFERENCE_VIEW_TYPE, activateEagleReferenceView } from './eagleReferenceView';
+import { normalizeLibraryProfiles, syncLegacyLibrarySettings, getEnabledResolvedLibraryProfiles } from './libraryProfiles';
 
 
 let DEBUG = false;
@@ -100,8 +100,8 @@ export default class MyPlugin extends Plugin {
 		this.app.workspace.on("window-open", (workspaceWindow, window) => {
 			this.registerDocument(window.document);
 		});
-		// 在插件加载时启动服务器
-		startServer(this.settings.libraryPath, this.settings.port);
+		// 在插件加载时启动所有有效库的本地预览服务
+		await this.refreshLibraryProfilesAndServers(false);
 		registerCanvasAutoNormalize(this);
 		// 添加设置面板
 		this.addSettingTab(new SampleSettingTab(this.app, this));
@@ -330,7 +330,7 @@ export default class MyPlugin extends Plugin {
 
 	onunload() {
 		// 在插件卸载时停止服务器
-		stopServer();
+		void stopServers();
 		this.clearAllAutoTagSyncTimers();
 		// this.app.vault.getResourcePath = this.originalGetResourcePath;
 		// this.app.metadataCache.getFirstLinkpathDest = this.originalGetFirstLinkpathDest;
@@ -344,26 +344,29 @@ export default class MyPlugin extends Plugin {
 			attachmentTagSyncMode: normalizeAttachmentTagSyncMode(loadedSettings),
 			exactSyncPageTagsToEagle: loadedSettings?.exactSyncPageTagsToEagle === true,
 			upload: normalizeUploadSettings(loadedSettings),
+			libraryProfiles: normalizeLibraryProfiles(loadedSettings),
+			externalUploadMode: normalizeExternalUploadMode(loadedSettings?.externalUploadMode),
+			defaultUploadTargetId: typeof loadedSettings?.defaultUploadTargetId === 'string' ? loadedSettings.defaultUploadTargetId : '',
 		};
 		delete (this.settings as MyPluginSettings & { websiteUpload?: boolean }).websiteUpload;
 		delete (this.settings as MyPluginSettings & { advancedID?: boolean }).advancedID;
 		delete (this.settings as MyPluginSettings & { autoSyncPageTags?: boolean }).autoSyncPageTags;
 		delete (this.settings as MyPluginSettings & { importEagleTagsToYaml?: boolean }).importEagleTagsToYaml;
-		this.updateLibraryPath(); // 更新Library Path
+		syncLegacyLibrarySettings(this.settings);
 	}
 
-	async updateLibraryPath() {
-		for (const path of this.settings.libraryPaths) {
-			if (existsSync(path)) { // 检查路径是否存在
-				this.settings.libraryPath = path;
-				break;
-			}
+	async refreshLibraryProfilesAndServers(saveSettings = true) {
+		const resolvedProfiles = syncLegacyLibrarySettings(this.settings);
+		await refreshServers(getEnabledResolvedLibraryProfiles(this.settings));
+		if (saveSettings) {
+			await this.saveSettings();
 		}
-		await this.saveSettings();
 		this.eagleReferenceIndex?.requestRefresh(50);
+		return resolvedProfiles;
 	}
 
 	async saveSettings() {
+		syncLegacyLibrarySettings(this.settings);
 		await this.saveData(this.settings);
 	}
 
@@ -405,26 +408,33 @@ export default class MyPlugin extends Plugin {
 		}
 
 		try {
-			const newItemIds = nextState.itemIds.filter((itemId) => !previousState.itemIds.includes(itemId));
+			const newTargets = nextState.itemTargets.filter((target) =>
+				!previousState.itemTargets.some((previousTarget) =>
+					previousTarget.port === target.port && previousTarget.itemId === target.itemId,
+				),
+			);
 			const pageToEagleStrategy = shouldReplacePageTagsInEagle(this.settings) ? 'replace' : 'append';
 
-			if (newItemIds.length > 0) {
+			if (newTargets.length > 0) {
 				if (isAppendPageTagsMode(this.settings) && nextState.pageTags.length > 0) {
-					await syncTagsToItemIds(nextState.pageTags, newItemIds, { notify: false, strategy: pageToEagleStrategy });
+					await syncTagsToTargets(this.settings, nextState.pageTags, newTargets, { notify: false, strategy: pageToEagleStrategy });
 				}
 
 				if (isImportEagleTagsMode(this.settings)) {
-					await mergeItemTagsIntoFileFrontmatter(this.app, file, newItemIds);
+					await mergeItemTagsIntoFileFrontmatter(this.app, file, this.settings, newTargets);
 				}
 
 				if (this.settings.autoSyncObsidianLinkToEagle) {
-					await syncObsidianLinkForFile(this.app, file, this.settings, { notify: false, itemIds: newItemIds });
+					await syncObsidianLinkForFile(this.app, file, this.settings, {
+						notify: false,
+						itemKeys: newTargets.map((target) => `${target.port}:${target.itemId}`),
+					});
 				}
 			}
 
 			if (previousState.tagSignature !== nextState.tagSignature) {
-				if (isAppendPageTagsMode(this.settings) && nextState.itemIds.length > 0) {
-					await syncTagsToItemIds(nextState.pageTags, nextState.itemIds, { notify: false, strategy: pageToEagleStrategy });
+				if (isAppendPageTagsMode(this.settings) && nextState.itemTargets.length > 0) {
+					await syncTagsToTargets(this.settings, nextState.pageTags, nextState.itemTargets, { notify: false, strategy: pageToEagleStrategy });
 				}
 				return;
 			}

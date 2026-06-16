@@ -5,6 +5,8 @@ import { App, ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon }
 import MyPlugin from './main';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 import { resolveEagleItemById } from './eagleItemResolver';
+import { getItemInfoFromLibrary, switchEagleLibrary, updateItemInLibrary } from './eagleApi';
+import { findLibraryProfileByPort } from './libraryProfiles';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -15,9 +17,8 @@ const shell = electron.shell as {
 
 export const EAGLE_REFERENCE_VIEW_TYPE = 'eagle-reference-view';
 
-const EAGLE_API_BASE_URL = 'http://localhost:41595/api/item';
 const RELEVANT_FILE_EXTENSIONS = new Set(['md', 'canvas']);
-const EAGLE_ITEM_INFO_URL_REGEX_SOURCE = 'http:\\/\\/localhost:\\d+\\/images\\/([^/?#\\s]+)\\.info';
+const EAGLE_ITEM_INFO_URL_REGEX_SOURCE = 'http:\\/\\/localhost:(\\d+)\\/images\\/([^/?#\\s]+)\\.info';
 const EAGLE_CANVAS_PROXY_URL_REGEX = /^http:\/\/localhost:\d+\/__eaglebridge__\/canvas-(?:image|resource)\?/i;
 
 type EagleReferenceSourceType = 'markdown' | 'canvas';
@@ -54,6 +55,7 @@ export interface EagleFileReference {
 
 export interface EagleItemReference {
 	itemId: string;
+	port: number;
 	displayName: string;
 	ext: string;
 	referenceCount: number;
@@ -87,38 +89,49 @@ function createEmptySnapshot(): EagleReferenceSnapshot {
 	};
 }
 
-function incrementCount(counts: Map<string, number>, itemId: string, increment = 1): void {
-	counts.set(itemId, (counts.get(itemId) ?? 0) + increment);
+function incrementCount(counts: Map<string, { occurrenceCount: number; port: number }>, itemId: string, port: number, increment = 1): void {
+	const existing = counts.get(itemId);
+	if (existing) {
+		existing.occurrenceCount += increment;
+		return;
+	}
+
+	counts.set(itemId, {
+		occurrenceCount: increment,
+		port,
+	});
 }
 
-function collectItemIdsFromText(raw: string): string[] {
+function collectItemTargetsFromText(raw: string): Array<{ itemId: string; port: number }> {
 	const pattern = new RegExp(EAGLE_ITEM_INFO_URL_REGEX_SOURCE, 'gi');
-	const ids: string[] = [];
+	const targets: Array<{ itemId: string; port: number }> = [];
 	let match: RegExpExecArray | null;
 
 	while ((match = pattern.exec(raw)) !== null) {
-		if (match[1]) {
-			ids.push(match[1]);
+		const port = Number.parseInt(match[1] || '', 10);
+		const itemId = match[2] || '';
+		if (Number.isFinite(port) && itemId) {
+			targets.push({ itemId, port });
 		}
 	}
 
-	return ids;
+	return targets;
 }
 
-function collectMarkdownOccurrences(raw: string): Map<string, number> {
-	const counts = new Map<string, number>();
+function collectMarkdownOccurrences(raw: string): Map<string, { occurrenceCount: number; port: number }> {
+	const counts = new Map<string, { occurrenceCount: number; port: number }>();
 
-	for (const itemId of collectItemIdsFromText(raw)) {
-		incrementCount(counts, itemId);
+	for (const target of collectItemTargetsFromText(raw)) {
+		incrementCount(counts, target.itemId, target.port);
 	}
 
 	return counts;
 }
 
-function extractCanvasNodeItemIds(rawUrl: string): string[] {
-	const directIds = collectItemIdsFromText(rawUrl);
-	if (directIds.length > 0) {
-		return directIds;
+function extractCanvasNodeTargets(rawUrl: string): Array<{ itemId: string; port: number }> {
+	const directTargets = collectItemTargetsFromText(rawUrl);
+	if (directTargets.length > 0) {
+		return directTargets;
 	}
 
 	if (!EAGLE_CANVAS_PROXY_URL_REGEX.test(rawUrl)) {
@@ -132,14 +145,14 @@ function extractCanvasNodeItemIds(rawUrl: string): string[] {
 			return [];
 		}
 
-		return collectItemIdsFromText(decodeURIComponent(sourceUrl));
+		return collectItemTargetsFromText(decodeURIComponent(sourceUrl));
 	} catch {
 		return [];
 	}
 }
 
-function collectCanvasOccurrences(raw: string): Map<string, number> {
-	const counts = new Map<string, number>();
+function collectCanvasOccurrences(raw: string): Map<string, { occurrenceCount: number; port: number }> {
+	const counts = new Map<string, { occurrenceCount: number; port: number }>();
 
 	try {
 		const parsed = JSON.parse(raw) as {
@@ -151,25 +164,25 @@ function collectCanvasOccurrences(raw: string): Map<string, number> {
 		const nodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
 
 		for (const node of nodes) {
-			const nodeItemIds = new Set<string>();
+			const nodeItemTargets = new Map<string, { itemId: string; port: number }>();
 			const candidateUrls = [
 				typeof node.url === 'string' ? node.url : null,
 				typeof node.eagleBridgeSourceUrl === 'string' ? node.eagleBridgeSourceUrl : null,
 			].filter((value): value is string => Boolean(value));
 
 			for (const candidateUrl of candidateUrls) {
-				for (const itemId of extractCanvasNodeItemIds(candidateUrl)) {
-					nodeItemIds.add(itemId);
+				for (const target of extractCanvasNodeTargets(candidateUrl)) {
+					nodeItemTargets.set(`${target.port}:${target.itemId}`, target);
 				}
 			}
 
-			for (const itemId of nodeItemIds) {
-				incrementCount(counts, itemId);
+			for (const target of nodeItemTargets.values()) {
+				incrementCount(counts, target.itemId, target.port);
 			}
 		}
 	} catch {
-		for (const itemId of collectItemIdsFromText(raw)) {
-			incrementCount(counts, itemId);
+		for (const target of collectItemTargetsFromText(raw)) {
+			incrementCount(counts, target.itemId, target.port);
 		}
 	}
 
@@ -177,7 +190,7 @@ function collectCanvasOccurrences(raw: string): Map<string, number> {
 }
 
 export function extractEagleItemIdFromUrl(rawUrl: string): string | null {
-	return collectItemIdsFromText(rawUrl)[0] ?? null;
+	return collectItemTargetsFromText(rawUrl)[0]?.itemId ?? null;
 }
 
 function compareStrings(left: string, right: string): number {
@@ -223,19 +236,20 @@ function readLocalItemMetadata(
 	libraryPath: string,
 	cache: Map<string, EagleLocalItemMetadata | null>,
 ): EagleLocalItemMetadata | null {
-	if (cache.has(itemId)) {
-		return cache.get(itemId) ?? null;
+	const normalizedLibraryPath = libraryPath.trim();
+	const cacheKey = `${normalizedLibraryPath}\u0001${itemId}`;
+	if (cache.has(cacheKey)) {
+		return cache.get(cacheKey) ?? null;
 	}
 
-	const normalizedLibraryPath = libraryPath.trim();
 	if (!normalizedLibraryPath) {
-		cache.set(itemId, null);
+		cache.set(cacheKey, null);
 		return null;
 	}
 
 	const metadataPath = path.join(normalizedLibraryPath, 'images', `${itemId}.info`, 'metadata.json');
 	if (!fs.existsSync(metadataPath)) {
-		cache.set(itemId, null);
+		cache.set(cacheKey, null);
 		return null;
 	}
 
@@ -253,10 +267,10 @@ function readLocalItemMetadata(
 			ext,
 			label: ext ? `${name}${ext}` : name,
 		};
-		cache.set(itemId, localMetadata);
+		cache.set(cacheKey, localMetadata);
 		return localMetadata;
 	} catch {
-		cache.set(itemId, null);
+		cache.set(cacheKey, null);
 		return null;
 	}
 }
@@ -265,62 +279,42 @@ function buildItemInfoUrl(itemId: string, port: number): string {
 	return `http://localhost:${port}/images/${itemId}.info`;
 }
 
-async function fetchLiveItemInfo(itemId: string): Promise<EagleLiveItemInfo | null> {
-	const response = await fetch(`${EAGLE_API_BASE_URL}/info?id=${encodeURIComponent(itemId)}`, {
-		method: 'GET',
-		redirect: 'follow' as RequestRedirect,
-	});
-
-	if (!response.ok) {
+async function fetchLiveItemInfo(plugin: MyPlugin, port: number, itemId: string): Promise<EagleLiveItemInfo | null> {
+	const profile = findLibraryProfileByPort(plugin.settings, port);
+	if (!profile?.resolvedPath) {
 		return null;
 	}
 
-	const result = await response.json();
-	if (result?.status !== 'success' || !result.data) {
+	const itemInfo = await getItemInfoFromLibrary(profile, itemId);
+	if (!itemInfo) {
 		return null;
 	}
-
-	const data = result.data as {
-		id?: unknown;
-		name?: unknown;
-		ext?: unknown;
-		annotation?: unknown;
-		url?: unknown;
-		tags?: unknown;
-	};
 
 	return {
-		id: typeof data.id === 'string' ? data.id : itemId,
-		name: typeof data.name === 'string' ? data.name : itemId,
-		ext: typeof data.ext === 'string' ? normalizeFileExtension(data.ext) : '',
-		annotation: typeof data.annotation === 'string' ? data.annotation : '',
-		url: typeof data.url === 'string' ? data.url : '',
-		tags: normalizeTags(data.tags),
+		id: itemInfo.id,
+		name: itemInfo.name,
+		ext: itemInfo.ext,
+		annotation: itemInfo.annotation,
+		url: itemInfo.url,
+		tags: itemInfo.tags,
 	};
 }
 
-async function updateLiveItemInfo(itemId: string, draft: EagleItemDraft): Promise<boolean> {
-	const response = await fetch(`${EAGLE_API_BASE_URL}/update`, {
-		method: 'POST',
-		body: JSON.stringify({
-			id: itemId,
-			annotation: draft.annotation,
-			url: draft.url,
-			tags: normalizeTags(draft.tags),
-		}),
-		redirect: 'follow' as RequestRedirect,
-	});
-
-	if (!response.ok) {
+async function updateLiveItemInfo(plugin: MyPlugin, port: number, itemId: string, draft: EagleItemDraft): Promise<boolean> {
+	const profile = findLibraryProfileByPort(plugin.settings, port);
+	if (!profile?.resolvedPath) {
 		return false;
 	}
 
-	const result = await response.json();
-	return result?.status === 'success' || result?.status === undefined;
+	return updateItemInLibrary(profile, itemId, {
+		annotation: draft.annotation,
+		url: draft.url,
+		tags: normalizeTags(draft.tags),
+	});
 }
 
-async function openItemInObsidian(plugin: MyPlugin, itemId: string): Promise<void> {
-	const itemUrl = buildItemInfoUrl(itemId, plugin.settings.port);
+async function openItemInObsidian(plugin: MyPlugin, itemId: string, port: number): Promise<void> {
+	const itemUrl = buildItemInfoUrl(itemId, port);
 	const openMethod = plugin.settings.openInObsidian || 'newPage';
 
 	if (openMethod === 'newPage') {
@@ -378,12 +372,12 @@ async function openFileInOtherApps(filePath: string): Promise<void> {
 	});
 }
 
-async function resolveLocalFilePath(plugin: MyPlugin, itemId: string | null): Promise<string | null> {
-	if (!itemId) {
+async function resolveLocalFilePath(plugin: MyPlugin, itemId: string | null, port: number | null): Promise<string | null> {
+	if (!itemId || !port) {
 		return null;
 	}
 
-	const libraryPath = plugin.settings.libraryPath.trim();
+	const libraryPath = findLibraryProfileByPort(plugin.settings, port)?.resolvedPath?.trim() ?? '';
 	if (!libraryPath) {
 		return null;
 	}
@@ -400,7 +394,6 @@ export class EagleReferenceIndex {
 	private readonly plugin: MyPlugin;
 	private readonly listeners = new Set<IndexListener>();
 	private readonly metadataCache = new Map<string, EagleLocalItemMetadata | null>();
-	private metadataCacheLibraryPath = '';
 	private snapshot: EagleReferenceSnapshot = createEmptySnapshot();
 	private rebuildTimer: number | null = null;
 	private rebuildPromise: Promise<EagleReferenceSnapshot> | null = null;
@@ -476,12 +469,6 @@ export class EagleReferenceIndex {
 	}
 
 	private async performRebuild(): Promise<EagleReferenceSnapshot> {
-		const normalizedLibraryPath = this.plugin.settings.libraryPath.trim();
-		if (normalizedLibraryPath !== this.metadataCacheLibraryPath) {
-			this.metadataCache.clear();
-			this.metadataCacheLibraryPath = normalizedLibraryPath;
-		}
-
 		const files = getFilteredSourceFiles(this.plugin.app);
 		const itemBuilders = new Map<string, EagleItemReference>();
 		const fileToItemIds = new Map<string, string[]>();
@@ -499,10 +486,12 @@ export class EagleReferenceIndex {
 			const itemIds = Array.from(occurrences.keys());
 			fileToItemIds.set(file.path, itemIds);
 
-			for (const [itemId, occurrenceCount] of occurrences) {
-				const metadata = readLocalItemMetadata(itemId, normalizedLibraryPath, this.metadataCache);
+			for (const [itemId, occurrence] of occurrences) {
+				const libraryPath = findLibraryProfileByPort(this.plugin.settings, occurrence.port)?.resolvedPath ?? '';
+				const metadata = readLocalItemMetadata(itemId, libraryPath, this.metadataCache);
 				const item = itemBuilders.get(itemId) ?? {
 					itemId,
+					port: occurrence.port,
 					displayName: metadata?.label ?? itemId,
 					ext: metadata?.ext ?? '',
 					referenceCount: 0,
@@ -515,10 +504,10 @@ export class EagleReferenceIndex {
 					filePath: file.path,
 					fileName: file.name,
 					sourceType: getSourceType(file),
-					occurrenceCount,
+					occurrenceCount: occurrence.occurrenceCount,
 				});
 				item.referenceCount = item.references.length;
-				item.mentionCount += occurrenceCount;
+				item.mentionCount += occurrence.occurrenceCount;
 				itemBuilders.set(itemId, item);
 			}
 		}
@@ -983,12 +972,18 @@ export class EagleReferenceView extends ItemView {
 		const summaryActionsEl = summaryHeaderEl.createDiv({ cls: 'eagle-ref-summary-actions' });
 		const openInEagleButton = summaryActionsEl.createEl('button', { cls: 'mod-cta', text: '在 Eagle 中打开' });
 		openInEagleButton.addEventListener('click', () => {
-			void shell.openExternal(`eagle://item/${selectedItem.itemId}`);
+			void (async () => {
+				const profile = findLibraryProfileByPort(this.plugin.settings, selectedItem.port);
+				if (profile?.resolvedPath) {
+					await switchEagleLibrary(profile.resolvedPath);
+				}
+				await shell.openExternal(`eagle://item/${selectedItem.itemId}`);
+			})();
 		});
 
 		const openInObsidianButton = summaryActionsEl.createEl('button', { text: '在 Ob 中打开' });
 		openInObsidianButton.addEventListener('click', () => {
-			void openItemInObsidian(this.plugin, selectedItem.itemId);
+			void openItemInObsidian(this.plugin, selectedItem.itemId, selectedItem.port);
 		});
 
 		const openDefaultButton = summaryActionsEl.createEl('button', { text: '默认打开' });
@@ -1006,7 +1001,7 @@ export class EagleReferenceView extends ItemView {
 			openDeleteEagleAttachmentModal({
 				plugin: this.plugin,
 				item: selectedItem,
-				itemUrl: buildItemInfoUrl(selectedItem.itemId, this.plugin.settings.port),
+				itemUrl: buildItemInfoUrl(selectedItem.itemId, selectedItem.port),
 				contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
 				currentLinkMode: 'current-file-links',
 				currentLinkFile: this.getActiveFile(),
@@ -1174,7 +1169,8 @@ export class EagleReferenceView extends ItemView {
 
 		const token = ++this.detailFetchToken;
 		try {
-			const liveInfo = await fetchLiveItemInfo(itemId);
+			const selectedItem = this.snapshot.itemsById.get(itemId);
+			const liveInfo = selectedItem ? await fetchLiveItemInfo(this.plugin, selectedItem.port, itemId) : null;
 			if (token !== this.detailFetchToken) {
 				return;
 			}
@@ -1211,7 +1207,12 @@ export class EagleReferenceView extends ItemView {
 			return;
 		}
 
-		const saved = await updateLiveItemInfo(this.selectedItemId, this.itemDraft);
+		const selectedItem = this.snapshot.itemsById.get(this.selectedItemId);
+		if (!selectedItem) {
+			return;
+		}
+
+		const saved = await updateLiveItemInfo(this.plugin, selectedItem.port, this.selectedItemId, this.itemDraft);
 		if (!saved) {
 			new Notice('保存到 Eagle 失败。');
 			return;
@@ -1222,19 +1223,24 @@ export class EagleReferenceView extends ItemView {
 	}
 
 	private async openSelectedItemFile(mode: 'default' | 'other'): Promise<void> {
-		const selectedItem = this.selectedItemId;
+		const selectedItemId = this.selectedItemId;
+		if (!selectedItemId) {
+			return;
+		}
+
+		const selectedItem = this.snapshot.itemsById.get(selectedItemId);
 		if (!selectedItem) {
 			return;
 		}
 
-		const details = this.itemDetails ?? await fetchLiveItemInfo(selectedItem);
+		const details = this.itemDetails ?? await fetchLiveItemInfo(this.plugin, selectedItem.port, selectedItemId);
 		if (!details) {
 			new Notice('无法读取 Eagle 文件路径。');
 			return;
 		}
 
 		this.itemDetails = details;
-		const filePath = await resolveLocalFilePath(this.plugin, details.id);
+		const filePath = await resolveLocalFilePath(this.plugin, details.id, selectedItem.port);
 		if (!filePath || !fs.existsSync(filePath)) {
 			new Notice('找不到本地源文件，请确认 Eagle 库路径设置正确。');
 			return;

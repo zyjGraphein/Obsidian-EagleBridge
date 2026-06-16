@@ -1,8 +1,9 @@
 import { MarkdownView, Modal, Notice, TFile } from 'obsidian';
 import type MyPlugin from './main';
 import type { EagleFileReference, EagleItemReference } from './eagleReferenceView';
+import { moveItemToTrashInLibrary } from './eagleApi';
+import { extractEagleLinkTarget, findLibraryProfileByPort } from './libraryProfiles';
 
-const EAGLE_MOVE_TO_TRASH_API = 'http://localhost:41595/api/item/moveToTrash';
 const EAGLE_ITEM_INFO_URL_REGEX_SOURCE = 'http:\\/\\/localhost:\\d+\\/images\\/([^/?#\\s]+)\\.info';
 const EAGLE_CANVAS_PROXY_URL_REGEX = /^http:\/\/localhost:\d+\/__eaglebridge__\/canvas-(?:image|resource)\?/i;
 
@@ -243,21 +244,14 @@ export async function removeAllLinksForItem(
 	return { fileCount, mentionCount };
 }
 
-export async function moveItemToTrash(itemId: string): Promise<boolean> {
-	const response = await fetch(EAGLE_MOVE_TO_TRASH_API, {
-		method: 'POST',
-		body: JSON.stringify({
-			itemIds: [itemId],
-		}),
-		redirect: 'follow' as RequestRedirect,
-	});
-
-	if (!response.ok) {
+export async function moveItemToTrash(plugin: MyPlugin, itemUrl: string, itemId: string): Promise<boolean> {
+	const target = extractEagleLinkTarget(itemUrl);
+	const profile = target ? findLibraryProfileByPort(plugin.settings, target.port) : null;
+	if (!profile?.resolvedPath) {
 		return false;
 	}
 
-	const result = await response.json();
-	return result?.status === 'success';
+	return moveItemToTrashInLibrary(profile, itemId);
 }
 
 class DeleteEagleAttachmentModal extends Modal {
@@ -347,7 +341,7 @@ class DeleteEagleAttachmentModal extends Modal {
 					return;
 				}
 
-				const moved = await moveItemToTrash(item.itemId);
+				const moved = await moveItemToTrash(plugin, itemUrl, item.itemId);
 				if (!moved) {
 					new Notice('Eagle 附件删除失败。');
 					return;
@@ -360,7 +354,7 @@ class DeleteEagleAttachmentModal extends Modal {
 			}
 
 			const removedSummary = await removeAllLinksForItem(plugin, item, itemUrl);
-			const moved = await moveItemToTrash(item.itemId);
+			const moved = await moveItemToTrash(plugin, itemUrl, item.itemId);
 			if (!moved) {
 				new Notice('Eagle 附件删除失败，未回滚已删除的链接。');
 				return;
