@@ -1,74 +1,83 @@
-import { Modal } from 'obsidian';
+import { Menu } from 'obsidian';
 import type MyPlugin from './main';
 import type { ResolvedEagleLibraryProfile } from './libraryProfiles';
 
-class UploadTargetModal extends Modal {
-	private readonly profiles: ResolvedEagleLibraryProfile[];
-	private readonly resolveSelection: (profile: ResolvedEagleLibraryProfile | null) => void;
-	private didResolve = false;
+export interface UploadTargetMenuAnchor {
+	x: number;
+	y: number;
+	document?: Document;
+}
 
-	constructor(
-		plugin: MyPlugin,
-		profiles: ResolvedEagleLibraryProfile[],
-		resolveSelection: (profile: ResolvedEagleLibraryProfile | null) => void,
-	) {
-		super(plugin.app);
-		this.profiles = profiles;
-		this.resolveSelection = resolveSelection;
-	}
+export type UploadTargetMenuSelection = ResolvedEagleLibraryProfile | 'obsidian-default' | null;
 
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.createEl('h2', { text: 'Choose Eagle library' });
-		contentEl.createEl('p', {
-			text: 'Select which library should receive this external upload.',
-		});
+interface ChooseUploadTargetOptions {
+	allowObsidianDefault?: boolean;
+	anchor?: UploadTargetMenuAnchor | null;
+}
 
-		for (const profile of this.profiles) {
-			const button = contentEl.createEl('button', {
-				text: `${profile.alias} (${profile.servePort})`,
-				cls: 'mod-cta',
-			});
-			button.style.display = 'block';
-			button.style.width = '100%';
-			button.style.marginBottom = '8px';
-			button.addEventListener('click', () => {
-				this.finish(profile);
-			});
-
-			contentEl.createEl('div', {
-				text: profile.resolvedPath,
-				cls: 'setting-item-description',
-			});
-		}
-
-		const cancelButton = contentEl.createEl('button', { text: 'Cancel' });
-		cancelButton.addEventListener('click', () => this.finish(null));
-	}
-
-	onClose(): void {
-		if (!this.didResolve) {
-			this.finish(null);
-		}
-	}
-
-	private finish(profile: ResolvedEagleLibraryProfile | null): void {
-		if (this.didResolve) {
-			return;
-		}
-
-		this.didResolve = true;
-		this.resolveSelection(profile);
-		this.close();
-	}
+function resolveMenuAnchor(anchor?: UploadTargetMenuAnchor | null): Required<UploadTargetMenuAnchor> {
+	const documentRef = anchor?.document ?? window.document;
+	const view = documentRef.defaultView ?? window;
+	return {
+		x: anchor?.x ?? Math.round(view.innerWidth / 2),
+		y: anchor?.y ?? Math.round(view.innerHeight / 2),
+		document: documentRef,
+	};
 }
 
 export function chooseUploadTargetProfile(
-	plugin: MyPlugin,
+	_plugin: MyPlugin,
 	profiles: ResolvedEagleLibraryProfile[],
-): Promise<ResolvedEagleLibraryProfile | null> {
+	options: ChooseUploadTargetOptions = {},
+): Promise<UploadTargetMenuSelection> {
 	return new Promise((resolve) => {
-		new UploadTargetModal(plugin, profiles, resolve).open();
+		const menu = new Menu();
+		const anchor = resolveMenuAnchor(options.anchor);
+		let didResolve = false;
+
+		const finish = (selection: UploadTargetMenuSelection): void => {
+			if (didResolve) {
+				return;
+			}
+
+			didResolve = true;
+			resolve(selection);
+			menu.hide();
+		};
+
+		for (const profile of profiles) {
+			menu.addItem((item) => item
+				.setIcon('folder-root')
+				.setTitle(`${profile.alias} (${profile.servePort})`)
+				.onClick(() => {
+					finish(profile);
+				}));
+		}
+
+		if (options.allowObsidianDefault) {
+			menu.addSeparator();
+			menu.addItem((item) => item
+				.setIcon('image')
+				.setTitle('Obsidian 默认嵌入')
+				.onClick(() => {
+					finish('obsidian-default');
+				}));
+		}
+
+		menu.addSeparator();
+		menu.addItem((item) => item
+			.setIcon('x')
+			.setTitle('取消')
+			.onClick(() => {
+				finish(null);
+			}));
+
+		menu.onHide(() => {
+			if (!didResolve) {
+				finish(null);
+			}
+		});
+
+		menu.showAtPosition({ x: anchor.x, y: anchor.y }, anchor.document);
 	});
 }

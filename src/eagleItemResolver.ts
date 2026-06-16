@@ -13,9 +13,22 @@ export interface EagleResolvedItem {
 	externalUrl: string | null;
 }
 
+export interface EagleLocalItemInfo {
+	id: string;
+	name: string;
+	ext: string;
+	annotation: string;
+	url: string;
+	tags: string[];
+}
+
 interface EagleMetadataFile {
+	id?: unknown;
 	name?: unknown;
 	ext?: unknown;
+	annotation?: unknown;
+	url?: unknown;
+	tags?: unknown;
 }
 
 interface EagleSourceEntry {
@@ -34,6 +47,22 @@ export async function resolveEagleItemById(libraryPath: string, itemId: string):
 	return resolveEagleItemByInfoDirectory(infoDirPath, normalizedItemId);
 }
 
+export async function readEagleItemInfoById(libraryPath: string, itemId: string): Promise<EagleLocalItemInfo | null> {
+	const normalizedLibraryPath = libraryPath.trim();
+	const normalizedItemId = itemId.trim();
+	if (!normalizedLibraryPath || !normalizedItemId) {
+		return null;
+	}
+
+	const metadataPath = path.join(path.resolve(normalizedLibraryPath), 'images', `${normalizedItemId}.info`, 'metadata.json');
+	const metadata = await readMetadataFile(metadataPath);
+	if (!metadata) {
+		return null;
+	}
+
+	return buildLocalItemInfo(metadata, normalizedItemId);
+}
+
 export async function resolveEagleItemByInfoDirectory(
 	infoDirPath: string,
 	explicitItemId?: string,
@@ -44,10 +73,8 @@ export async function resolveEagleItemByInfoDirectory(
 		return null;
 	}
 
-	let metadata: EagleMetadataFile = {};
-	try {
-		metadata = JSON.parse(await fs.promises.readFile(metadataPath, 'utf8')) as EagleMetadataFile;
-	} catch {
+	const metadata = await readMetadataFile(metadataPath);
+	if (!metadata) {
 		return null;
 	}
 
@@ -110,6 +137,28 @@ function buildExpectedFileName(metadataName: string, metadataExt: string): strin
 	}
 
 	return `${metadataName}.${metadataExt}`;
+}
+
+async function readMetadataFile(metadataPath: string): Promise<EagleMetadataFile | null> {
+	try {
+		return JSON.parse(await fs.promises.readFile(metadataPath, 'utf8')) as EagleMetadataFile;
+	} catch {
+		return null;
+	}
+}
+
+function buildLocalItemInfo(metadata: EagleMetadataFile, fallbackItemId: string): EagleLocalItemInfo {
+	const itemId = normalizeMetadataPart(metadata.id) || fallbackItemId;
+	const name = normalizeMetadataPart(metadata.name) || itemId;
+	const ext = normalizeFileExtension(normalizeMetadataPart(metadata.ext));
+	return {
+		id: itemId,
+		name,
+		ext,
+		annotation: normalizeMetadataPart(metadata.annotation),
+		url: normalizeMetadataPart(metadata.url),
+		tags: normalizeTags(metadata.tags),
+	};
 }
 
 async function listSourceEntries(infoDirPath: string): Promise<EagleSourceEntry[]> {
@@ -196,6 +245,23 @@ function normalizeMetadataPart(value: unknown): string {
 	}
 
 	return value.trim();
+}
+
+function normalizeTags(value: unknown): string[] {
+	if (Array.isArray(value)) {
+		return value
+			.map((entry) => String(entry).trim())
+			.filter((entry) => entry.length > 0);
+	}
+
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((entry) => entry.trim())
+			.filter((entry) => entry.length > 0);
+	}
+
+	return [];
 }
 
 function normalizeUnicode(value: string): string {

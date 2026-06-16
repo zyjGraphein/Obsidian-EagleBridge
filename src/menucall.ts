@@ -8,9 +8,9 @@ import { existsSync } from 'fs';
 import { EditorView} from '@codemirror/view';
 import { extractEagleItemIdFromUrl } from './eagleReferenceView';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
-import { resolveEagleItemById } from './eagleItemResolver';
+import { readEagleItemInfoById, resolveEagleItemById } from './eagleItemResolver';
 import { extractEagleLinkTarget, findLibraryProfileByPort } from './libraryProfiles';
-import { getItemInfoFromLibrary, switchEagleLibrary, updateItemInLibrary } from './eagleApi';
+import { switchEagleLibrary, updateItemInLibrary } from './eagleApi';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -735,9 +735,9 @@ export async function fetchImageInfo(plugin: MyPlugin, url: string): Promise<{ i
 	}
 
 	try {
-		const itemInfo = await getItemInfoFromLibrary(targetProfile.profile, targetProfile.target.itemId);
+		const itemInfo = await readEagleItemInfoById(targetProfile.profile.resolvedPath, targetProfile.target.itemId);
 		if (!itemInfo) {
-			print('Failed to fetch item info');
+			print('Failed to read local item info');
 			return null;
 		}
 
