@@ -312,206 +312,449 @@ async function showEagleImageContextMenu(
 	menu.showAtPosition({ x: event.pageX, y: event.pageY + offset });
 }
 
+type MenuIcon = Parameters<MenuItem['setIcon']>[0];
+
+interface EagleMenuInfo {
+	id: string;
+	name: string;
+	ext: string;
+	annotation: string;
+	tags: string[];
+	url: string;
+}
+
+function getMenuAnchorFromEvent(event: MouseEvent | KeyboardEvent): { x: number; y: number; document: Document } {
+	const currentTarget = event.currentTarget;
+	if (currentTarget instanceof HTMLElement) {
+		const documentRef = currentTarget.ownerDocument ?? window.document;
+		const view = documentRef.defaultView ?? window;
+		const menuRoot = currentTarget.closest('.menu') as HTMLElement | null;
+		const rect = (menuRoot ?? currentTarget).getBoundingClientRect();
+		return {
+			x: Math.round(rect.left + view.scrollX),
+			y: Math.round(rect.top + view.scrollY),
+			document: documentRef,
+		};
+	}
+
+	if (event instanceof MouseEvent) {
+		return {
+			x: Math.round(event.pageX + 8),
+			y: Math.round(event.pageY),
+			document: event.view?.document ?? window.document,
+		};
+	}
+
+	return {
+		x: Math.round(window.innerWidth / 2),
+		y: Math.round(window.innerHeight / 2),
+		document: window.document,
+	};
+}
+
+function openChildMenu(
+	plugin: MyPlugin,
+	event: MouseEvent | KeyboardEvent,
+	populate: (menu: Menu) => void,
+): void {
+	const anchor = getMenuAnchorFromEvent(event);
+	window.setTimeout(() => {
+		const childMenu = new Menu();
+		populate(childMenu);
+		registerEscapeButton(plugin, childMenu, anchor.document);
+		childMenu.showAtPosition({ x: anchor.x, y: anchor.y }, anchor.document);
+	}, 0);
+}
+
+function addChildMenuLauncher(
+	plugin: MyPlugin,
+	menu: Menu,
+	title: string,
+	icon: MenuIcon,
+	populate: (submenu: Menu) => void,
+): void {
+	menu.addItem((item: MenuItem) =>
+		item
+			.setIcon(icon)
+			.setTitle(title)
+			.onClick((event) => {
+				openChildMenu(plugin, event, populate);
+			}),
+	);
+}
+
+function truncateMenuValue(value: string, maxLength = 42): string {
+	const trimmedValue = value.trim();
+	if (!trimmedValue) {
+		return '(empty)';
+	}
+
+	return trimmedValue.length > maxLength
+		? `${trimmedValue.slice(0, Math.max(0, maxLength - 1))}…`
+		: trimmedValue;
+}
+
+function copyTextWithNotice(value: string, label: string): void {
+	const normalizedValue = value.trim();
+	if (!normalizedValue) {
+		new Notice(`${label} is empty`);
+		return;
+	}
+
+	navigator.clipboard.writeText(normalizedValue)
+		.then(() => new Notice(`Copied ${label}`))
+		.catch(() => new Notice(`Failed to copy ${label}`));
+}
+
+async function openItemInObsidianByUrl(plugin: MyPlugin, oburl: string): Promise<void> {
+	const openMethod = plugin.settings.openInObsidian || 'newPage';
+	if (openMethod === 'newPage') {
+		window.open(oburl, '_blank');
+		return;
+	}
+
+	if (openMethod === 'popup') {
+		const leaf = plugin.app.workspace.getLeaf('window');
+		await leaf.setViewState({
+			type: 'webviewer',
+			state: {
+				url: oburl,
+				navigate: true,
+			},
+			active: true,
+		});
+		return;
+	}
+
+	if (openMethod === 'rightPane') {
+		const leaf = plugin.app.workspace.getLeaf('split', 'vertical');
+		await leaf.setViewState({
+			type: 'webviewer',
+			state: {
+				url: oburl,
+				navigate: true,
+			},
+			active: true,
+		});
+	}
+}
+
+async function openItemInEagleByUrl(plugin: MyPlugin, oburl: string, itemId: string): Promise<void> {
+	const targetProfile = resolveProfileForUrl(plugin, oburl);
+	if (targetProfile) {
+		await switchEagleLibrary(targetProfile.profile.resolvedPath);
+	}
+
+	const eagleLink = `eagle://item/${itemId}`;
+	navigator.clipboard.writeText(eagleLink);
+	await shell.openExternal(eagleLink);
+}
+
+async function openItemInReferenceView(plugin: MyPlugin, itemId: string): Promise<void> {
+	await plugin.openEagleReferenceView(itemId);
+}
+
+async function withResolvedLocalFile(
+	plugin: MyPlugin,
+	itemId: string,
+	itemUrl: string,
+	onResolved: (filePath: string) => Promise<void> | void,
+): Promise<void> {
+	const localFilePath = await resolveLocalFilePath(plugin, itemId, itemUrl);
+	if (!localFilePath) {
+		new Notice('Cannot find the local source file, please check Eagle library path');
+		return;
+	}
+
+	await onResolved(localFilePath);
+}
+
+async function copyMarkdownLinkFromActiveEditor(plugin: MyPlugin, url: string): Promise<void> {
+	const editor = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+	if (!editor) {
+		new Notice('Cannot find the active editor');
+		return;
+	}
+
+	const doc = editor.getDoc();
+	const lineCount = doc.lineCount();
+	for (let line = 0; line < lineCount; line += 1) {
+		const lineText = doc.getLine(line);
+		const regex = new RegExp(`(!?\\[.*?\\]\\(${escapeRegExp(url)}[^)]*\\))`, 'g');
+		const match = regex.exec(lineText);
+		if (!match?.[1]) {
+			continue;
+		}
+
+		await navigator.clipboard.writeText(match[1]);
+		new Notice('Link copied');
+		return;
+	}
+
+	new Notice('Cannot find the link');
+}
+
+async function fetchMenuInfo(plugin: MyPlugin, url: string): Promise<EagleMenuInfo | null> {
+	const imageInfo = await fetchImageInfo(plugin, url);
+	if (!imageInfo) {
+		return null;
+	}
+
+	return {
+		id: imageInfo.id,
+		name: imageInfo.name,
+		ext: imageInfo.ext,
+		annotation: imageInfo.annotation,
+		tags: Array.isArray(imageInfo.tags)
+			? imageInfo.tags
+			: imageInfo.tags.split(',').map((tag) => tag.trim()).filter((tag) => tag.length > 0),
+		url: imageInfo.url,
+	};
+}
+
+function appendOpenGroup(
+	plugin: MyPlugin,
+	menu: Menu,
+	oburl: string,
+	itemId: string | null,
+): void {
+	addChildMenuLauncher(plugin, menu, 'Open', 'folder-open', (submenu) => {
+		submenu.addItem((item: MenuItem) =>
+			item
+				.setIcon('file-symlink')
+				.setTitle('Obsidian')
+				.onClick(() => {
+					void openItemInObsidianByUrl(plugin, oburl);
+				}),
+		);
+
+		if (itemId) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('image')
+					.setTitle('Eagle')
+					.onClick(() => {
+						void openItemInEagleByUrl(plugin, oburl, itemId);
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('network')
+					.setTitle('Reference view')
+					.onClick(() => {
+						void openItemInReferenceView(plugin, itemId);
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('square-arrow-out-up-right')
+					.setTitle('Default app')
+					.onClick(() => {
+						void withResolvedLocalFile(plugin, itemId, oburl, async (localFilePath) => {
+							try {
+								await openFileInDefaultApp(localFilePath);
+							} catch (error) {
+								print('Error opening file:', error);
+								new Notice('Cannot open the local source file');
+							}
+						});
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('external-link')
+					.setTitle(getOtherAppsMenuTitle())
+					.onClick(() => {
+						void withResolvedLocalFile(plugin, itemId, oburl, async (localFilePath) => {
+							try {
+								await openFileInOtherApps(localFilePath);
+							} catch (error) {
+								print('Error opening file:', error);
+								new Notice('Cannot open the local source file');
+							}
+						});
+					}),
+			);
+		}
+	});
+}
+
+function appendCopyGroup(
+	plugin: MyPlugin,
+	menu: Menu,
+	oburl: string,
+	itemId: string | null,
+	includeMarkdownLink: boolean,
+): void {
+	addChildMenuLauncher(plugin, menu, 'Copy', 'copy', (submenu) => {
+		if (itemId) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('files')
+					.setTitle('Source file')
+					.onClick(() => {
+						void withResolvedLocalFile(plugin, itemId, oburl, async (localFilePath) => {
+							try {
+								copyFileToClipboardCMD(localFilePath);
+								new Notice('Copied source file');
+							} catch (error) {
+								print('Error copying source file:', error);
+								new Notice('Failed to copy the file');
+							}
+						});
+					}),
+			);
+		}
+
+		if (includeMarkdownLink) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('link')
+					.setTitle('Markdown link')
+					.onClick(() => {
+						void copyMarkdownLinkFromActiveEditor(plugin, oburl);
+					}),
+			);
+		}
+	});
+}
+
+function appendPropertiesGroup(
+	plugin: MyPlugin,
+	menu: Menu,
+	oburl: string,
+	itemId: string | null,
+	imageInfo: EagleMenuInfo | null,
+): void {
+	addChildMenuLauncher(plugin, menu, 'Properties', 'sliders-horizontal', (submenu) => {
+		if (imageInfo) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('case-sensitive')
+					.setTitle(`Name: ${truncateMenuValue(imageInfo.name)}`)
+					.onClick(() => {
+						copyTextWithNotice(imageInfo.name, 'name');
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('letter-text')
+					.setTitle(`Annotation: ${truncateMenuValue(imageInfo.annotation)}`)
+					.onClick(() => {
+						copyTextWithNotice(imageInfo.annotation, 'annotation');
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('link-2')
+					.setTitle(`URL: ${truncateMenuValue(imageInfo.url)}`)
+					.onClick(() => {
+						copyTextWithNotice(imageInfo.url, 'URL');
+					}),
+			);
+
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('tags')
+					.setTitle(`Tags: ${truncateMenuValue(imageInfo.tags.join(', '))}`)
+					.onClick(() => {
+						copyTextWithNotice(imageInfo.tags.join(', '), 'tags');
+					}),
+			);
+		} else {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('alert-circle')
+					.setTitle('Local metadata unavailable')
+					.onClick(() => {
+						new Notice('Cannot read local metadata for this Eagle item');
+					}),
+			);
+		}
+
+		if (itemId) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('wrench')
+					.setTitle('Modify properties')
+					.onClick(() => {
+						new ModifyPropertiesModal(
+							plugin,
+							oburl,
+							itemId,
+							imageInfo?.name ?? itemId,
+							imageInfo?.annotation ?? '',
+							imageInfo?.url ?? '',
+							imageInfo?.tags ?? [],
+							() => {
+								// no-op
+							},
+						).open();
+					}),
+			);
+		}
+	});
+}
+
+function appendDeleteGroup(
+	plugin: MyPlugin,
+	menu: Menu,
+	url: string,
+	context: EagleBridgeMenuContext | null,
+): void {
+	addChildMenuLauncher(plugin, menu, 'Delete', 'trash-2', (submenu) => {
+		if (context) {
+			submenu.addItem((item: MenuItem) =>
+				item
+					.setIcon('eraser')
+					.setTitle('Clear markdown link')
+					.onClick(() => {
+						try {
+							const targetPos = resolveTargetPosForContext(plugin, context);
+							if (typeof targetPos !== 'number') {
+								throw new Error('NO_TARGET_POS');
+							}
+							deleteCurTargetLink(url, plugin, targetPos);
+						} catch {
+							new Notice('Error, could not clear the file!');
+						}
+					}),
+			);
+		}
+
+		submenu.addItem((item: MenuItem) =>
+			item
+				.setIcon('trash')
+				.setTitle('Delete attachment')
+				.onClick(async () => {
+					await openDeleteAttachmentDialog(plugin, url, context ? {
+						contextTitle: '将删除 Eagle 附件，并可选择是否删除当前链接或全部链接',
+						currentLinkMode: 'precise-current-link',
+						currentLinkTargetPos: typeof context.targetPos === 'number' ? context.targetPos : null,
+						currentLinkFile: getActiveReferenceFile(plugin),
+					} : {
+						contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
+						currentLinkMode: 'current-file-links',
+						currentLinkFile: getActiveReferenceFile(plugin),
+					});
+				}),
+		);
+	});
+}
+
 async function appendEagleImageMenuPreviewItems(plugin: MyPlugin, menu: Menu, oburl: string) {
-	const imageInfo = await fetchImageInfo(plugin, oburl);
+	const itemId = extractEagleItemIdFromUrl(oburl);
+	const imageInfo = await fetchMenuInfo(plugin, oburl);
 
-    if (imageInfo) {
-        const { id, name, ext, annotation, tags, url } = imageInfo;
-        // const infoToCopy = `ID: ${id}, Name: ${name}, Ext: ${ext}, Annotation: ${annotation}, Tags: ${tags}, URL: ${url}`;
-        // navigator.clipboard.writeText(infoToCopy);
-        // new Notice(`Copied: ${infoToCopy}`);
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("file-symlink")
-                .setTitle("Open in obsidian")
-                .onClick(async (event: MouseEvent) => {
-                    // 根据设置决定如何打开链接
-                    const openMethod = plugin.settings.openInObsidian || 'newPage';
-                    
-                    if (openMethod === 'newPage') {
-                        // 在新页面打开（默认行为）
-                        window.open(oburl, '_blank');
-                    } else if (openMethod === 'popup') {
-                        // 使用 Obsidian 的独立窗口打开
-                        const leaf = plugin.app.workspace.getLeaf('window');
-                        await leaf.setViewState({
-                            type: 'webviewer',
-                            state: {
-                                url: oburl,
-                                navigate: true,
-                            },
-                            active: true,
-                        });
-                    } else if (openMethod === 'rightPane') {
-                        // 在右侧新栏中打开
-                        const leaf = plugin.app.workspace.getLeaf('split', 'vertical');
-                        await leaf.setViewState({
-                            type: 'webviewer',
-                            state: {
-                                url: oburl,
-                                navigate: true,
-                            },
-                            active: true,
-                        });
-                    }
-                })
-        );
-        
-        
-        
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("file-symlink")
-                .setTitle("Open in eagle")
-                .onClick(async () => {
-                    const targetProfile = resolveProfileForUrl(plugin, oburl);
-                    if (targetProfile) {
-                        await switchEagleLibrary(targetProfile.profile.resolvedPath);
-                    }
-                    const eagleLink = `eagle://item/${id}`;
-                    navigator.clipboard.writeText(eagleLink);
-                    await shell.openExternal(eagleLink);
-                })
-        );
-
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("network")
-                .setTitle("Show Eagle references")
-                .onClick(async () => {
-                    const itemId = extractEagleItemIdFromUrl(oburl);
-                    await plugin.openEagleReferenceView(itemId);
-                })
-        );
-
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("square-arrow-out-up-right")
-                .setTitle("Open in the default app")
-                .onClick(async () => {
-                    const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
-                    if (!localFilePath) {
-                        new Notice('Cannot find the local source file, please check Eagle library path');
-                        return;
-                    }
-
-                    try {
-                        await openFileInDefaultApp(localFilePath);
-                    } catch (error) {
-                        print('Error opening file:', error);
-                        new Notice('Cannot open the local source file');
-                    }
-                })
-        );
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("external-link")
-                .setTitle(getOtherAppsMenuTitle())
-                .onClick(async () => {
-                    const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
-                    if (!localFilePath) {
-                        new Notice('Cannot find the local source file, please check Eagle library path');
-                        return;
-                    }
-
-                    try {
-                        await openFileInOtherApps(localFilePath);
-                    } catch (error) {
-                        print('Error opening file:', error);
-                        new Notice('Cannot open the local source file');
-                    }
-                })
-        );	
-        // 复制源文件
-        menu.addItem((item: MenuItem) =>
-        item
-            .setIcon("copy")
-            .setTitle("Copy source file")
-            .onClick(async () => {
-                const localFilePath = await resolveLocalFilePath(plugin, id, oburl);
-                if (!localFilePath) {
-                    new Notice("Cannot find the local source file", 3000);
-                    return;
-                }
-                try {
-                    copyFileToClipboardCMD(localFilePath);
-                    new Notice("Copied to clipboard!", 3000);
-                } catch (error) {
-                    console.error(error);
-                    new Notice("Failed to copy the file!", 3000);
-                }
-            })
-        );		
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("case-sensitive")
-                .setTitle(`Eagle Name: ${name}`)
-                .onClick(() => {
-                    navigator.clipboard.writeText(name);
-                    new Notice(`Copied: ${name}`);
-                })
-        );
-
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("letter-text")
-                .setTitle(`Eagle Annotation: ${annotation}`)
-                .onClick(() => {
-                    navigator.clipboard.writeText(annotation);
-                    new Notice(`Copied: ${annotation}`);
-                })
-        );
-
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("link-2")
-                .setTitle(`Eagle url: ${url}`)
-                .onClick(() => {
-                    // navigator.clipboard.writeText(url);
-                    window.open(url, '_self'); 
-                    new Notice(`Copied: ${url}`);
-                })
-        );
-        // 确保 tags 是一个数组
-        const tagsArray = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
-
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("tags")
-                .setTitle(`Eagle tag: ${tagsArray.join(', ')}`)
-                .onClick(() => {
-                    const tagsString = tagsArray.join(', ');
-                    navigator.clipboard.writeText(tagsString)
-                        .then(() => new Notice(`Copied: ${tagsString}`))
-                        .catch(err => new Notice('Failed to copy tags'));
-                })
-        );
-        menu.addItem((item: MenuItem) =>
-            item
-                .setIcon("wrench")
-                .setTitle("Modify properties")
-                .onClick(() => {
-                    new ModifyPropertiesModal(plugin, oburl, id, name, annotation, url, tagsArray, (newId, newName, newAnnotation, newUrl, newTags) => {
-                        // new Notice(`Name changed to: ${newName}`);
-                        // 在这里处理保存逻辑
-                    }).open();
-                })
-        );
-        // 其他菜单项可以继续使用 { id, name, ext } 数据
-    }
-
-    menu.addItem((item: MenuItem) =>
-        item
-            .setIcon("trash-2")
-            .setTitle("Delete attachment")
-            .onClick(async () => {
-                await openDeleteAttachmentDialog(plugin, oburl, {
-                    contextTitle: '将删除 Eagle 附件，并可选择是否删除当前文件中的链接',
-                    currentLinkMode: 'current-file-links',
-                    currentLinkFile: getActiveReferenceFile(plugin),
-                });
-            })
-    );
+	appendOpenGroup(plugin, menu, oburl, itemId);
+	appendCopyGroup(plugin, menu, oburl, itemId, false);
+	appendPropertiesGroup(plugin, menu, oburl, itemId, imageInfo);
+	appendDeleteGroup(plugin, menu, oburl, null);
 }
 
 async function appendEagleImageMenuSourceItems(
@@ -520,76 +763,14 @@ async function appendEagleImageMenuSourceItems(
 	url: string,
 	context: EagleBridgeMenuContext,
 ) {
-	await appendEagleImageMenuPreviewItems(plugin, menu, url);
+	const itemId = extractEagleItemIdFromUrl(url);
+	const imageInfo = await fetchMenuInfo(plugin, url);
 
-    menu.addItem((item: MenuItem) =>
-        item
-            .setIcon("copy")
-            .setTitle("Copy markdown link")
-            .onClick(async () => {
-                const editor = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-                if (!editor) {
-                    new Notice('Cannot find the active editor');
-                    return;
-                }
-
-                const doc = editor.getDoc();
-                const lineCount = doc.lineCount();
-
-                let linkFound = false;
-
-                for (let line = 0; line < lineCount; line++) {
-                    const lineText = doc.getLine(line);
-
-                    // 使用正则表达式查找 Markdown 链接，匹配带叹号和不带叹号的链接
-                    const regex = new RegExp(`(!?\\[.*?\\]\\(${url}\\))`, 'g');
-                    const match = regex.exec(lineText);
-
-                    if (match) {
-                        const linkText = match[1]; // 获取完整的匹配文本
-                        navigator.clipboard.writeText(linkText);
-                        new Notice('Link copied');
-                        linkFound = true;
-                        break; // 找到并复制后退出循环
-                    }
-                }
-
-                if (!linkFound) {
-                    new Notice('Cannot find the link');
-                }
-                
-            })
-    );
-    menu.addItem((item: MenuItem) =>
-        item
-            .setIcon("trash-2")
-            .setTitle("Clear markdown link")
-            .onClick(() => {
-                try {
-                    const targetPos = resolveTargetPosForContext(plugin, context);
-                    if (typeof targetPos !== 'number') {
-                        throw new Error('NO_TARGET_POS');
-                    }
-                    deleteCurTargetLink(url, plugin, targetPos);
-                } catch {
-                    new Notice("Error, could not clear the file!");
-                }
-            })
-    );
-    menu.addItem((item: MenuItem) =>
-        item
-            .setIcon("trash")
-            .setTitle("Delete attachment")
-            .onClick(async () => {
-                await openDeleteAttachmentDialog(plugin, url, {
-                    contextTitle: '将删除 Eagle 附件，并可选择是否删除当前链接或全部链接',
-                    currentLinkMode: 'precise-current-link',
-                    currentLinkTargetPos: typeof context.targetPos === 'number' ? context.targetPos : null,
-                    currentLinkFile: getActiveReferenceFile(plugin),
-                });
-            })
-    );
-} 
+	appendOpenGroup(plugin, menu, url, itemId);
+	appendCopyGroup(plugin, menu, url, itemId, true);
+	appendPropertiesGroup(plugin, menu, url, itemId, imageInfo);
+	appendDeleteGroup(plugin, menu, url, context);
+}
 
 export async function addEagleImageMenuPreviewMode(plugin: MyPlugin, menu: Menu, oburl: string, event: MouseEvent) {
 	await showEagleImageContextMenu(plugin, menu, {
