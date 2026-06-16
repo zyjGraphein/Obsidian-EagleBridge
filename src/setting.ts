@@ -191,11 +191,6 @@ export class SampleSettingTab extends PluginSettingTab {
 		containerEl.addClass('eagle-settings-root');
 
 		const shellEl = containerEl.createDiv({ cls: 'eagle-settings-shell' });
-		const heroEl = shellEl.createDiv({ cls: 'eagle-settings-hero' });
-		heroEl.createEl('h1', { text: 'EagleBridge' });
-		heroEl.createEl('p', {
-			text: 'Organize library routing, upload behavior, viewer preferences, and sync rules in clearer sections.',
-		});
 
 		const navEl = shellEl.createEl('nav', {
 			cls: 'eagle-settings-nav',
@@ -244,7 +239,9 @@ export class SampleSettingTab extends PluginSettingTab {
 		const headerEl = sectionEl.createDiv({ cls: 'eagle-settings-section-header' });
 		const copyEl = headerEl.createDiv({ cls: 'eagle-settings-section-copy' });
 		copyEl.createEl('h3', { text: title });
-		copyEl.createEl('p', { text: description });
+		if (description) {
+			copyEl.createEl('p', { text: description });
+		}
 
 		if (options.actionText && options.onAction) {
 			const actionButton = headerEl.createEl('button', {
@@ -302,22 +299,10 @@ export class SampleSettingTab extends PluginSettingTab {
 		this.display();
 	}
 
-	private async toggleProfileEnabled(profileIndex: number, enabled: boolean): Promise<void> {
-		this.plugin.settings.libraryProfiles[profileIndex].enabled = enabled;
-		await this.plugin.refreshLibraryProfilesAndServers();
-		this.display();
-	}
-
 	private renderLibraryRoutingSettings(parentEl: HTMLElement, resolvedProfiles: ReturnType<typeof getResolvedLibraryProfiles>): void {
-		const routingCard = this.createCard(
-			parentEl,
-			'External upload routing',
-			'Only used when dragged or pasted content is not already inside any configured Eagle library profile.',
-		);
-
-		new Setting(routingCard)
-			.setName('Target mode')
-			.setDesc('Choose a fixed library or ask every time an external file should be uploaded.')
+		new Setting(parentEl)
+			.setName('Mode')
+			.setDesc('Choose a fixed library or pick one each time for files outside all configured libraries.')
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption('fixed', 'Fixed target')
@@ -331,7 +316,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		if (this.plugin.settings.externalUploadMode === 'fixed') {
-			new Setting(routingCard)
+			new Setting(parentEl)
 				.setName('Default library')
 				.setDesc('External files upload here automatically.')
 				.addDropdown((dropdown) => {
@@ -384,7 +369,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 			buttonEl.createSpan({ cls: 'eagle-settings-profile-button-title', text: profile.alias });
 			buttonEl.createSpan({
-				cls: `eagle-settings-profile-pill ${profile.enabled ? 'is-enabled' : 'is-disabled'}`,
+				cls: 'eagle-settings-profile-pill',
 				text: `Port ${profile.servePort}`,
 			});
 			buttonEl.addEventListener('click', () => {
@@ -410,7 +395,7 @@ export class SampleSettingTab extends PluginSettingTab {
 		const summaryCopy = summaryHeader.createDiv({ cls: 'eagle-settings-profile-summary-copy' });
 		summaryCopy.createEl('h3', { text: profile.alias });
 		summaryCopy.createEl('p', {
-			text: 'One profile represents one real Eagle library. Put machine-specific path aliases under the same profile.',
+			text: 'One profile represents one Eagle library.',
 		});
 		const summaryActions = summaryHeader.createDiv({ cls: 'eagle-settings-profile-summary-actions' });
 		const deleteButton = summaryActions.createEl('button', {
@@ -424,14 +409,13 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		const metaGrid = summaryCard.createDiv({ cls: 'eagle-settings-profile-meta-grid' });
 		this.createMetaItem(metaGrid, 'Port', String(profile.servePort));
-		this.createMetaItem(metaGrid, 'Status', profile.enabled ? 'Enabled' : 'Disabled');
 		this.createMetaItem(metaGrid, 'Folder ID', profile.folderId || 'Not set');
 		this.createMetaItem(metaGrid, 'Current valid path', profile.resolvedPath || 'None on this device');
 
-		const basicCard = this.createCard(parentEl, 'Profile details', 'Core settings for this Eagle library profile.');
+		const basicCard = this.createCard(parentEl, 'Profile details', 'Core settings for this library.');
 		new Setting(basicCard)
 			.setName('Alias')
-			.setDesc('Required display name for this library profile.')
+			.setDesc('Display name for this profile.')
 			.addText((text) => {
 				text.setPlaceholder('Enter alias')
 					.setValue(profile.alias)
@@ -457,18 +441,8 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(basicCard)
-			.setName('Enabled')
-			.setDesc('Only enabled profiles with a valid local path will start a preview server.')
-			.addToggle((toggle) => {
-				toggle.setValue(profile.enabled)
-					.onChange((value) => {
-						void this.toggleProfileEnabled(profileIndex, value);
-					});
-			});
-
-		new Setting(basicCard)
 			.setName('Folder ID')
-			.setDesc('Default Eagle folder for uploads targeting this profile.')
+			.setDesc('Default Eagle folder for uploads to this profile.')
 			.addText((text) => {
 				text.setPlaceholder('Enter folder ID')
 					.setValue(profile.folderId || '')
@@ -481,11 +455,11 @@ export class SampleSettingTab extends PluginSettingTab {
 		const pathsCard = this.createCard(
 			parentEl,
 			'Path aliases',
-			'Add one path per computer. All paths inside this profile must point to the same Eagle library.',
+			'Add one path per computer. Every path here must point to the same library.',
 		);
 		new Setting(pathsCard)
 			.setName('Library paths')
-			.setDesc('The first existing path on the current device becomes the valid local path.')
+			.setDesc('The first existing path on this device becomes the active path.')
 			.addButton((button) => {
 				button
 					.setButtonText('Add path')
@@ -538,15 +512,15 @@ export class SampleSettingTab extends PluginSettingTab {
 		const resolvedProfiles = getResolvedLibraryProfiles(this.plugin.settings);
 		const routingSection = this.createSection(
 			parentEl,
-			'Upload destination',
-			'Control how external files choose a target library when they are not already inside any configured Eagle library.',
+			'Upload target',
+			'Choose where files outside all configured libraries should upload.',
 		);
 		this.renderLibraryRoutingSettings(routingSection, resolvedProfiles);
 
 		const profileSection = this.createSection(
 			parentEl,
-			'Profile workspace',
-			'Review every library in a clearer split layout. Each profile has its own detail pane and explicit delete action.',
+			'Library profiles',
+			'Create one profile per Eagle library.',
 			{
 				actionText: this.plugin.settings.libraryProfiles.length >= MAX_LIBRARY_PROFILES ? `Max ${MAX_LIBRARY_PROFILES}` : 'Add profile',
 				onAction: () => {
@@ -560,15 +534,13 @@ export class SampleSettingTab extends PluginSettingTab {
 	private renderUploadPage(parentEl: HTMLElement): void {
 		const sectionEl = this.createSection(
 			parentEl,
-			'Upload triggers',
-			'Separate the master switch, supported Obsidian surfaces, and allowed content formats.',
+			'Upload',
+			'Set the main switch, supported surfaces, and allowed content types.',
 		);
-		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
-
-		const masterCard = this.createCard(gridEl, 'Master switch', 'Turn all external Eagle uploads on or off.');
+		const masterCard = this.createCard(sectionEl, 'Master switch', 'Main control for all external Eagle uploads.');
 		new Setting(masterCard)
 			.setName('Attachment upload')
-			.setDesc('Master switch for uploading dragged or pasted external content to Eagle.')
+			.setDesc('Enable Eagle upload for external drag and paste.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.enabled)
 					.onChange(async (value) => {
@@ -578,10 +550,11 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		const surfaceCard = this.createCard(gridEl, 'Obsidian surface', 'Choose which editor surfaces can trigger Eagle upload.');
+		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
+		const surfaceCard = this.createCard(gridEl, 'Obsidian surface', 'Choose which surfaces can trigger uploads.');
 		new Setting(surfaceCard)
 			.setName('Markdown upload')
-			.setDesc('Handle paste and drag events inside Markdown editors.')
+			.setDesc('Handle paste and drag inside Markdown editors.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.markdown)
 					.onChange(async (value) => {
@@ -591,7 +564,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 		new Setting(surfaceCard)
 			.setName('Canvas upload')
-			.setDesc('Handle paste and drag events inside Canvas views.')
+			.setDesc('Handle paste and drag inside Canvas views.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.canvas)
 					.onChange(async (value) => {
@@ -600,10 +573,10 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		const contentCard = this.createCard(gridEl, 'Content type', 'Choose which dragged or pasted content types are allowed to upload.');
+		const contentCard = this.createCard(gridEl, 'Content type', 'Choose which content types can upload.');
 		new Setting(contentCard)
 			.setName('Image upload')
-			.setDesc('Upload image files to Eagle.')
+			.setDesc('Upload image files.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.image)
 					.onChange(async (value) => {
@@ -613,7 +586,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 		new Setting(contentCard)
 			.setName('Video upload')
-			.setDesc('Upload video files to Eagle.')
+			.setDesc('Upload video files.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.video)
 					.onChange(async (value) => {
@@ -623,7 +596,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 		new Setting(contentCard)
 			.setName('Website upload')
-			.setDesc('Upload website URLs to Eagle. This may be slower and exported notes may not jump as cleanly.')
+			.setDesc('Upload website URLs.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.website)
 					.onChange(async (value) => {
@@ -633,7 +606,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 		new Setting(contentCard)
 			.setName('Other upload')
-			.setDesc('Upload PDF and other non-image, non-video files to Eagle.')
+			.setDesc('Upload PDF and other files.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.other)
 					.onChange(async (value) => {
@@ -794,14 +767,14 @@ export class SampleSettingTab extends PluginSettingTab {
 
 	private renderAdvancedPage(parentEl: HTMLElement): void {
 		const resolvedProfiles = getResolvedLibraryProfiles(this.plugin.settings);
-		const activeServerCount = resolvedProfiles.filter((profile) => profile.enabled && profile.resolvedPath).length;
+		const activeServerCount = resolvedProfiles.filter((profile) => profile.resolvedPath).length;
 
 		const sectionEl = this.createSection(
 			parentEl,
 			'Maintenance',
-			'Refresh active preview servers after major path changes and enable debug logging only when you need deeper diagnostics.',
+			'Refresh preview servers after path changes and enable debug logging only when needed.',
 		);
-		const cardEl = this.createCard(sectionEl, 'Preview server tools', 'Current active library preview servers are derived from enabled profiles with a valid local path.');
+		const cardEl = this.createCard(sectionEl, 'Preview server tools', 'Active preview servers come from profiles with a valid local path.');
 		cardEl.createDiv({
 			cls: 'eagle-settings-inline-note',
 			text: `Active preview servers on this device: ${activeServerCount}`,

@@ -19,12 +19,21 @@ If your plugin does not need CSS, delete this file.
     padding: 6px 0 18px;
 }
 
-.eagle-settings-hero,
+.eagle-settings-root {
+    --eagle-settings-canvas: #ffffff;
+    --eagle-settings-surface: #fafafa;
+    --eagle-settings-border: #e5e5e5;
+    --eagle-settings-border-strong: #d4d4d4;
+    --eagle-settings-text: #000000;
+    --eagle-settings-text-muted: #737373;
+    --eagle-settings-text-soft: #a3a3a3;
+}
+
 .eagle-settings-section,
 .eagle-settings-card {
-    border: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--background-primary) 95%, var(--background-secondary));
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
 }
 
 .eagle-settings-hero h1,
@@ -43,7 +52,7 @@ If your plugin does not need CSS, delete this file.
 .eagle-settings-profile-summary-copy p,
 .eagle-settings-meta-label {
     margin: 0;
-    color: var(--text-muted);
+    color: var(--eagle-settings-text-muted);
     line-height: 1.45;
 }
 
@@ -52,19 +61,19 @@ If your plugin does not need CSS, delete this file.
     gap: 0;
     margin: 0;
     padding: 0 6px;
-    border-bottom: 2px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--eagle-settings-border);
     flex-wrap: wrap;
 }
 
 .eagle-settings-nav-button {
     padding: 8px 18px;
     border: none;
-    background: transparent;
+    background: transparent !important;
     cursor: pointer;
     font-size: var(--font-ui-small);
-    color: var(--text-muted);
-    margin: 0 0 -2px;
-    border-bottom: 2px solid transparent;
+    color: var(--eagle-settings-text-muted) !important;
+    margin: 0 0 -1px;
+    border-bottom: 1px solid transparent !important;
     transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
     border-radius: 8px 8px 0 0;
     text-align: center;
@@ -72,15 +81,15 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-settings-nav-button:hover {
-    color: var(--text-normal);
-    background-color: var(--background-modifier-hover);
+    color: var(--eagle-settings-text) !important;
+    background-color: var(--eagle-settings-surface) !important;
 }
 
 .eagle-settings-nav-button.is-active {
-    color: var(--text-accent);
-    border-bottom-color: var(--text-accent);
-    background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-primary));
-    font-weight: var(--font-semibold);
+    color: var(--eagle-settings-text) !important;
+    border-bottom-color: var(--eagle-settings-text) !important;
+    background: var(--eagle-settings-canvas) !important;
+    font-weight: 600;
 }
 
 .eagle-settings-content {
@@ -90,19 +99,8 @@ If your plugin does not need CSS, delete this file.
     gap: 16px;
 }
 
-.eagle-settings-hero {
-    padding: 18px 22px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--background-primary) 84%, var(--interactive-accent) 16%), var(--background-primary));
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-}
-
-.eagle-settings-hero h1 {
-    font-size: 1.2rem;
-    margin-bottom: 8px;
-}
-
 .eagle-settings-section {
-    overflow: hidden;
+    overflow: visible;
 }
 
 .eagle-settings-section-header,
@@ -113,8 +111,8 @@ If your plugin does not need CSS, delete this file.
     flex-wrap: wrap;
     gap: 16px;
     padding: 18px 20px 12px;
-    border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
-    background: color-mix(in srgb, var(--background-secondary) 42%, var(--background-primary));
+    border-bottom: 1px solid var(--eagle-settings-border);
+    background: var(--eagle-settings-canvas);
 }
 
 .eagle-settings-section-copy {
@@ -144,7 +142,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-settings-card {
-    padding: 16px 18px;
+    padding: 16px;
 }
 
 .eagle-settings-card-header {
@@ -154,19 +152,32 @@ If your plugin does not need CSS, delete this file.
     margin-bottom: 10px;
 }
 
-.eagle-settings-card .setting-item {
+.eagle-settings-section-body > .setting-item,
+.eagle-settings-card .setting-item,
+.eagle-tag-sync-panel .setting-item,
+.eagle-tag-sync-subcard .setting-item,
+.eagle-obsidian-link-panel .setting-item {
     margin: 0;
-    padding: 14px 0;
-    border-top: 1px solid var(--background-modifier-border);
+    padding: 14px 16px;
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
 }
 
-.eagle-settings-card .setting-item:first-of-type {
-    border-top: none;
-    padding-top: 0;
+.eagle-settings-section-body > .setting-item + .setting-item,
+.eagle-settings-card .setting-item + .setting-item,
+.eagle-tag-sync-panel .setting-item + .setting-item,
+.eagle-tag-sync-subcard .setting-item + .setting-item,
+.eagle-obsidian-link-panel .setting-item + .setting-item {
+    margin-top: 10px;
 }
 
-.eagle-settings-card .setting-item:last-of-type {
-    padding-bottom: 0;
+.eagle-settings-section-body > .setting-item-info,
+.eagle-settings-card .setting-item-info,
+.eagle-tag-sync-panel .setting-item-info,
+.eagle-tag-sync-subcard .setting-item-info,
+.eagle-obsidian-link-panel .setting-item-info {
+    color: var(--eagle-settings-text);
 }
 
 .eagle-settings-profile-tabs {
@@ -181,9 +192,9 @@ If your plugin does not need CSS, delete this file.
     gap: 8px;
     max-width: 100%;
     padding: 10px 14px;
-    border: 1px solid var(--background-modifier-border);
+    border: 1px solid var(--eagle-settings-border);
     border-radius: 999px;
-    background: var(--background-primary);
+    background: var(--eagle-settings-canvas);
     cursor: pointer;
     transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 }
@@ -197,13 +208,13 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-settings-profile-button:hover {
-    border-color: color-mix(in srgb, var(--text-accent) 34%, var(--background-modifier-border));
-    background-color: var(--background-modifier-hover);
+    border-color: var(--eagle-settings-border-strong) !important;
+    background-color: var(--eagle-settings-surface) !important;
 }
 
 .eagle-settings-profile-button.is-active {
-    border-color: color-mix(in srgb, var(--text-accent) 42%, var(--background-modifier-border));
-    background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-primary));
+    border-color: var(--eagle-settings-text) !important;
+    background: var(--eagle-settings-surface) !important;
 }
 
 .eagle-settings-profile-pill {
@@ -214,16 +225,8 @@ If your plugin does not need CSS, delete this file.
     border-radius: 999px;
     font-size: 0.78rem;
     white-space: nowrap;
-}
-
-.eagle-settings-profile-pill.is-enabled {
-    background: color-mix(in srgb, #2bb673 18%, transparent);
-    color: var(--text-normal);
-}
-
-.eagle-settings-profile-pill.is-disabled {
-    background: color-mix(in srgb, #d76c82 16%, transparent);
-    color: var(--text-normal);
+    background: var(--eagle-settings-surface);
+    color: var(--eagle-settings-text-muted);
 }
 
 .eagle-settings-profile-summary-copy {
@@ -252,9 +255,9 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-settings-meta-item {
     padding: 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 14px;
-    background: var(--background-primary);
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
 }
 
 .eagle-settings-meta-label {
@@ -265,14 +268,16 @@ If your plugin does not need CSS, delete this file.
 .eagle-settings-meta-value {
     word-break: break-word;
     line-height: 1.45;
+    color: var(--eagle-settings-text);
 }
 
 .eagle-settings-empty-state,
 .eagle-settings-inline-empty,
 .eagle-settings-inline-note {
     padding: 14px 16px;
-    border-radius: 14px;
-    background: var(--background-primary-alt);
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-surface);
 }
 
 .eagle-settings-empty-state h4 {
@@ -288,10 +293,10 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-upload-panel {
     margin-top: 1rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 14px;
-    background: linear-gradient(180deg, var(--background-secondary), var(--background-primary));
-    overflow: hidden;
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
+    overflow: visible;
 }
 
 .eagle-upload-panel .setting-item {
@@ -300,14 +305,14 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-upload-details {
-    border-top: 1px solid var(--background-modifier-border);
+    border-top: 1px solid var(--eagle-settings-border);
 }
 
 .eagle-upload-details summary {
     cursor: pointer;
     padding: 14px 18px;
     font-weight: 600;
-    color: var(--text-accent);
+    color: var(--eagle-settings-text);
     list-style: none;
 }
 
@@ -323,10 +328,10 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-upload-card {
-    border: 1px solid var(--background-modifier-border);
+    border: 1px solid var(--eagle-settings-border);
     border-radius: 12px;
-    background: var(--background-primary-alt);
-    overflow: hidden;
+    background: var(--eagle-settings-canvas);
+    overflow: visible;
 }
 
 .eagle-upload-card h3 {
@@ -338,7 +343,7 @@ If your plugin does not need CSS, delete this file.
 .eagle-upload-card-desc {
     margin: 0;
     padding: 0 16px 8px;
-    color: var(--text-muted);
+    color: var(--eagle-settings-text-muted);
     line-height: 1.4;
 }
 
@@ -347,17 +352,15 @@ If your plugin does not need CSS, delete this file.
 }
 
 .eagle-upload-card .setting-item:first-of-type {
-    border-top: 1px solid var(--background-modifier-border);
+    border-top: 1px solid var(--eagle-settings-border);
 }
 
 .eagle-tag-sync-panel {
     margin-top: 1rem;
     padding: 18px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 14px;
-    background:
-        radial-gradient(circle at top right, color-mix(in srgb, var(--text-accent) 10%, transparent), transparent 32%),
-        linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
 }
 
 .eagle-tag-sync-panel h3 {
@@ -367,54 +370,34 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-tag-sync-panel-desc {
     margin: 0 0 12px;
-    color: var(--text-muted);
+    color: var(--eagle-settings-text-muted);
     line-height: 1.45;
-}
-
-.eagle-tag-sync-panel .setting-item {
-    margin: 0;
-    padding: 14px 0;
-    border-top: 1px solid var(--background-modifier-border);
-}
-
-.eagle-tag-sync-panel .setting-item:first-of-type {
-    border-top: none;
-    padding-top: 0;
 }
 
 .eagle-tag-sync-subcard {
     margin-top: 10px;
-    padding: 0 14px;
-    border: 1px solid var(--background-modifier-border);
+    padding: 14px;
+    border: 1px solid var(--eagle-settings-border);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--background-primary-alt) 84%, transparent);
-}
-
-.eagle-tag-sync-subcard .setting-item {
-    padding: 14px 0;
-}
-
-.eagle-tag-sync-subcard .setting-item:first-of-type {
-    border-top: none;
+    background: var(--eagle-settings-surface);
 }
 
 .eagle-tag-sync-hint {
     margin-top: 12px;
     padding: 12px 14px;
     border-radius: 12px;
-    background: var(--background-primary-alt);
-    color: var(--text-muted);
+    border: 1px solid var(--eagle-settings-border);
+    background: var(--eagle-settings-surface);
+    color: var(--eagle-settings-text-muted);
     line-height: 1.45;
 }
 
 .eagle-obsidian-link-panel {
     margin-top: 1rem;
     padding: 18px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 14px;
-    background:
-        radial-gradient(circle at top right, color-mix(in srgb, var(--text-accent) 8%, transparent), transparent 30%),
-        linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+    border: 1px solid var(--eagle-settings-border);
+    border-radius: 12px;
+    background: var(--eagle-settings-canvas);
 }
 
 .eagle-obsidian-link-panel h3 {
@@ -424,19 +407,41 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-obsidian-link-panel-desc {
     margin: 0 0 12px;
-    color: var(--text-muted);
+    color: var(--eagle-settings-text-muted);
     line-height: 1.45;
 }
 
-.eagle-obsidian-link-panel .setting-item {
-    margin: 0;
-    padding: 14px 0;
-    border-top: 1px solid var(--background-modifier-border);
+.eagle-settings-root button.mod-cta,
+.eagle-settings-root .mod-cta {
+    background: var(--eagle-settings-text) !important;
+    color: var(--eagle-settings-canvas) !important;
+    border: 1px solid var(--eagle-settings-text) !important;
+    border-radius: 999px;
+    box-shadow: none !important;
 }
 
-.eagle-obsidian-link-panel .setting-item:first-of-type {
-    border-top: none;
-    padding-top: 0;
+.eagle-settings-root button:not(.mod-cta):not(.mod-warning),
+.eagle-settings-root .setting-extra-button {
+    border-radius: 999px;
+}
+
+.eagle-settings-root .checkbox-container {
+    background-color: var(--eagle-settings-border-strong) !important;
+    box-shadow: none !important;
+}
+
+.eagle-settings-root .checkbox-container.is-enabled {
+    background-color: var(--eagle-settings-text) !important;
+}
+
+.eagle-settings-root input[type='text'],
+.eagle-settings-root input[type='search'],
+.eagle-settings-root select,
+.eagle-settings-root textarea {
+    border: 1px solid var(--eagle-settings-border) !important;
+    border-radius: 999px;
+    background: var(--eagle-settings-canvas) !important;
+    box-shadow: none !important;
 }
 
 @media (max-width: 900px) {
@@ -766,6 +771,14 @@ If your plugin does not need CSS, delete this file.
     margin-top: 10px;
 }
 
+.eagle-ref-mode-panel {
+    margin-top: 12px;
+}
+
+.eagle-ref-mode-panel.is-hidden {
+    display: none;
+}
+
 .eagle-ref-chip-list {
     max-height: 132px;
     overflow: auto;
@@ -890,6 +903,213 @@ If your plugin does not need CSS, delete this file.
     .eagle-ref-field.is-wide {
         grid-column: auto;
     }
+}
+
+.eagle-ref-view,
+.eagle-delete-modal {
+    --eagle-ref-canvas: #ffffff;
+    --eagle-ref-surface: #fafafa;
+    --eagle-ref-border: #e5e5e5;
+    --eagle-ref-border-strong: #d4d4d4;
+    --eagle-ref-text: #000000;
+    --eagle-ref-text-muted: #737373;
+    --eagle-ref-text-soft: #a3a3a3;
+}
+
+.eagle-ref-view {
+    gap: 16px;
+    padding: 16px;
+    background: var(--background-primary);
+}
+
+.eagle-ref-title,
+.eagle-ref-section-title,
+.eagle-ref-file-name,
+.eagle-ref-summary-text h3 {
+    color: var(--eagle-ref-text);
+    font-weight: 600;
+}
+
+.eagle-ref-search-hint,
+.eagle-ref-section-meta,
+.eagle-ref-file-path,
+.eagle-ref-field-label,
+.eagle-ref-field-desc,
+.eagle-ref-empty,
+.eagle-ref-details-empty,
+.eagle-delete-modal-hint {
+    color: var(--eagle-ref-text-muted);
+}
+
+.eagle-ref-card,
+.eagle-ref-empty,
+.eagle-ref-field,
+.eagle-ref-file-row {
+    border: 1px solid var(--eagle-ref-border) !important;
+    border-radius: 12px;
+    background: var(--eagle-ref-canvas) !important;
+    box-shadow: none !important;
+}
+
+.eagle-ref-empty,
+.eagle-ref-details-empty {
+    background: var(--eagle-ref-surface) !important;
+}
+
+.eagle-ref-search-row,
+.eagle-ref-toolbar,
+.eagle-ref-summary-header,
+.eagle-ref-file-row {
+    gap: 12px;
+}
+
+.eagle-ref-toolbar-button {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--eagle-ref-border);
+    border-radius: 999px;
+    background: var(--eagle-ref-canvas);
+    color: var(--eagle-ref-text);
+    box-shadow: none;
+}
+
+.eagle-ref-search-input,
+.eagle-ref-input {
+    border: 1px solid var(--eagle-ref-border) !important;
+    border-radius: 999px;
+    background: var(--eagle-ref-canvas) !important;
+    color: var(--eagle-ref-text) !important;
+    box-shadow: none !important;
+}
+
+.eagle-ref-textarea {
+    border-radius: 12px;
+    background: var(--eagle-ref-canvas) !important;
+}
+
+.eagle-ref-search-input::placeholder,
+.eagle-ref-input::placeholder,
+.eagle-ref-textarea::placeholder {
+    color: var(--eagle-ref-text-soft);
+}
+
+.eagle-ref-scope-group {
+    padding: 4px;
+    border: 1px solid var(--eagle-ref-border);
+    border-radius: 999px;
+    background: var(--eagle-ref-surface);
+}
+
+.eagle-ref-scope-button {
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--eagle-ref-text-muted);
+}
+
+.eagle-ref-scope-button.is-active {
+    background: var(--eagle-ref-text) !important;
+    color: var(--eagle-ref-canvas) !important;
+}
+
+.eagle-ref-chip-list {
+    gap: 8px;
+}
+
+.eagle-ref-chip {
+    border: 1px solid var(--eagle-ref-border) !important;
+    border-radius: 999px;
+    background: var(--eagle-ref-surface) !important;
+    color: var(--eagle-ref-text);
+    padding: 6px 12px;
+}
+
+.eagle-ref-chip.is-selected {
+    border-color: var(--eagle-ref-text) !important;
+    background: var(--eagle-ref-text) !important;
+    color: var(--eagle-ref-canvas) !important;
+}
+
+.eagle-ref-summary-header {
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--eagle-ref-border);
+}
+
+.eagle-ref-card .eagle-ref-section-header {
+    margin-bottom: 12px;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.eagle-ref-summary-actions,
+.eagle-ref-detail-actions,
+.eagle-delete-modal-actions {
+    gap: 8px;
+}
+
+.eagle-ref-summary-actions button,
+.eagle-ref-detail-actions button,
+.eagle-delete-modal button {
+    min-height: 36px;
+    padding: 8px 14px;
+    border: 1px solid var(--eagle-ref-border);
+    border-radius: 999px;
+    background: var(--eagle-ref-canvas);
+    color: var(--eagle-ref-text);
+    box-shadow: none;
+}
+
+.eagle-ref-view .mod-cta,
+.eagle-delete-modal .mod-cta {
+    border-color: var(--eagle-ref-text) !important;
+    background: var(--eagle-ref-text) !important;
+    color: var(--eagle-ref-canvas) !important;
+}
+
+.eagle-ref-view .mod-warning,
+.eagle-delete-modal .mod-warning {
+    border-color: var(--eagle-ref-border-strong) !important;
+    background: var(--eagle-ref-canvas) !important;
+    color: var(--eagle-ref-text) !important;
+}
+
+.eagle-ref-file-row {
+    align-items: flex-start;
+}
+
+.eagle-ref-file-row.is-active {
+    border-color: var(--eagle-ref-text) !important;
+    background: var(--eagle-ref-surface) !important;
+}
+
+.eagle-ref-pill,
+.eagle-ref-pill-muted,
+.eagle-ref-pill-accent,
+.eagle-ref-pill-markdown,
+.eagle-ref-pill-canvas {
+    border: 1px solid var(--eagle-ref-border);
+    border-radius: 999px;
+    background: var(--eagle-ref-surface) !important;
+    color: var(--eagle-ref-text-muted) !important;
+}
+
+.eagle-ref-field {
+    gap: 6px;
+    padding: 12px;
+}
+
+.eagle-ref-field-value {
+    color: var(--eagle-ref-text);
+}
+
+.eagle-ref-delete-modal,
+.eagle-delete-modal {
+    color: var(--eagle-ref-text);
+}
+
+.eagle-delete-modal h2 {
+    margin: 0 0 12px;
+    color: var(--eagle-ref-text);
 }
 
 .eagle-delete-modal p {

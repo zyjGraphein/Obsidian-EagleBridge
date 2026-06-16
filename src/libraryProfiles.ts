@@ -87,7 +87,7 @@ function normalizeProfile(
 		paths: normalizePaths(nextValue.paths),
 		resolvedPath: typeof nextValue.resolvedPath === 'string' ? nextValue.resolvedPath.trim() : '',
 		folderId: normalizeFolderId(nextValue.folderId),
-		enabled: nextValue.enabled !== false,
+		enabled: true,
 	};
 }
 
@@ -152,8 +152,7 @@ export function syncLegacyLibrarySettings(settings: MyPluginSettings): ResolvedE
 	const resolvedProfiles = resolveLibraryProfiles(settings.libraryProfiles);
 	settings.libraryProfiles = resolvedProfiles;
 
-	const primaryProfile = resolvedProfiles.find((profile) => profile.enabled && profile.resolvedPath)
-		?? resolvedProfiles.find((profile) => profile.enabled)
+	const primaryProfile = resolvedProfiles.find((profile) => profile.resolvedPath)
 		?? resolvedProfiles[0];
 
 	settings.libraryPath = primaryProfile?.resolvedPath ?? '';
@@ -177,7 +176,7 @@ export function getResolvedLibraryProfiles(settings: MyPluginSettings): Resolved
 }
 
 export function getEnabledResolvedLibraryProfiles(settings: MyPluginSettings): ResolvedEagleLibraryProfile[] {
-	return getResolvedLibraryProfiles(settings).filter((profile) => profile.enabled && profile.resolvedPath);
+	return getResolvedLibraryProfiles(settings).filter((profile) => profile.resolvedPath);
 }
 
 export function findLibraryProfileByPort(
@@ -203,7 +202,7 @@ export function findLibraryProfileByFilePath(
 	filePath: string,
 ): ResolvedEagleLibraryProfile | null {
 	for (const profile of getResolvedLibraryProfiles(settings)) {
-		if (!profile.enabled || !profile.resolvedPath) {
+		if (!profile.resolvedPath) {
 			continue;
 		}
 
@@ -217,7 +216,7 @@ export function findLibraryProfileByFilePath(
 
 export function getFixedUploadTargetProfile(settings: MyPluginSettings): ResolvedEagleLibraryProfile | null {
 	const targetById = findLibraryProfileById(settings, settings.defaultUploadTargetId);
-	if (targetById?.enabled && targetById.resolvedPath) {
+	if (targetById?.resolvedPath) {
 		return targetById;
 	}
 

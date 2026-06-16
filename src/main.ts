@@ -20,7 +20,7 @@ import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHan
 import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToTargets } from './synchronizedpagetabs';
 import { syncObsidianLinkForFile } from './obsidianLinkSync';
 import { registerMarkdownExportFileMenu } from './exportMarkdown';
-import { EagleReferenceIndex, EagleReferenceView, EAGLE_REFERENCE_VIEW_TYPE, activateEagleReferenceView } from './eagleReferenceView';
+import { EagleReferenceIndex, EagleReferenceView, EAGLE_REFERENCE_VIEW_TYPE, activateEagleReferenceView, type EagleReferenceViewMode } from './eagleReferenceView';
 import { normalizeLibraryProfiles, syncLegacyLibrarySettings, getEnabledResolvedLibraryProfiles } from './libraryProfiles';
 
 
@@ -62,13 +62,27 @@ export default class MyPlugin extends Plugin {
 			this.app.workspace.getLeavesOfType(EAGLE_REFERENCE_VIEW_TYPE).forEach((leaf) => leaf.detach());
 		});
 		this.addRibbonIcon('network', 'Open Eagle reference view', () => {
-			void this.openEagleReferenceView();
+			void this.openEagleReferenceView({ viewMode: 'current-file' });
 		});
 		this.addCommand({
 			id: 'open-eagle-reference-view',
 			name: 'Open Eagle reference view',
 			callback: () => {
-				void this.openEagleReferenceView();
+				void this.openEagleReferenceView({ viewMode: 'current-file' });
+			},
+		});
+		this.addCommand({
+			id: 'open-eagle-reference-current-file',
+			name: 'Open Eagle references: current file',
+			callback: () => {
+				void this.openEagleReferenceView({ viewMode: 'current-file' });
+			},
+		});
+		this.addCommand({
+			id: 'open-eagle-reference-library-search',
+			name: 'Open Eagle references: library search',
+			callback: () => {
+				void this.openEagleReferenceView({ viewMode: 'library-search' });
 			},
 		});
 		this.addCommand({
@@ -370,8 +384,10 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	async openEagleReferenceView(itemId?: string | null) {
-		return activateEagleReferenceView(this, { itemId });
+	async openEagleReferenceView(
+		options: { itemId?: string | null; viewMode?: EagleReferenceViewMode } = {},
+	) {
+		return activateEagleReferenceView(this, options);
 	}
 
 	refreshAutoTagSyncState() {

@@ -451,7 +451,7 @@ async function openItemInEagleByUrl(plugin: MyPlugin, oburl: string, itemId: str
 }
 
 async function openItemInReferenceView(plugin: MyPlugin, itemId: string): Promise<void> {
-	await plugin.openEagleReferenceView(itemId);
+	await plugin.openEagleReferenceView({ itemId });
 }
 
 async function withResolvedLocalFile(

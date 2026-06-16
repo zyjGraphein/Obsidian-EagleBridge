@@ -126,14 +126,14 @@ export function canDeleteCurrentLink(item: EagleItemReference, file: TFile | nul
 export async function removeCurrentLinkFromEditor(plugin: MyPlugin, url: string, targetPos: number): Promise<number> {
 	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 	if (!activeView) {
-		new Notice('无法获取当前编辑器。');
+		new Notice('Could not access the current editor.');
 		return 0;
 	}
 
 	const editor = activeView.editor;
 	const editorView = (editor as any).cm;
 	if (!editorView?.state?.doc) {
-		new Notice('当前编辑器不支持精确删除链接。');
+		new Notice('The current editor does not support precise link removal.');
 		return 0;
 	}
 
@@ -141,7 +141,7 @@ export async function removeCurrentLinkFromEditor(plugin: MyPlugin, url: string,
 	const lineText = targetLine.text;
 	const ranges = findMarkdownLinkRangesInLine(url, lineText);
 	if (ranges.length === 0) {
-		new Notice('没有找到当前链接。');
+		new Notice('The current link was not found.');
 		return 0;
 	}
 
@@ -149,7 +149,7 @@ export async function removeCurrentLinkFromEditor(plugin: MyPlugin, url: string,
 	const matchRange = ranges.find(([from, to]) => relativePos >= from && relativePos <= to)
 		?? (ranges.length === 1 ? ranges[0] : null);
 	if (!matchRange) {
-		new Notice('当前行存在多个相同链接，未执行删除以避免误删。');
+		new Notice('Multiple matching links were found on this line, so nothing was removed.');
 		return 0;
 	}
 
@@ -271,26 +271,26 @@ class DeleteEagleAttachmentModal extends Modal {
 
 		contentEl.empty();
 		contentEl.addClass('eagle-delete-modal');
-		contentEl.createEl('h2', { text: '删除 Eagle 附件' });
+		contentEl.createEl('h2', { text: 'Delete Eagle item' });
 		contentEl.createEl('p', {
-			text: `${this.options.contextTitle}。该附件被 ${item.referenceCount} 个文件引用，共出现 ${item.mentionCount} 次。`,
+			text: `${this.options.contextTitle}. This item is referenced by ${item.referenceCount} file${item.referenceCount === 1 ? '' : 's'} and appears ${item.mentionCount} time${item.mentionCount === 1 ? '' : 's'}.`,
 		});
 
 		if (currentLinkMode === 'current-file-links' && currentLinkFile) {
 			const hint = currentFileReference
-				? `当前文件：${currentLinkFile.path}，其中出现 ${currentFileReference.occurrenceCount} 次。`
-				: `当前文件：${currentLinkFile.path}，但未检测到该附件引用。`;
+				? `Current file: ${currentLinkFile.path}. It appears ${currentFileReference.occurrenceCount} time${currentFileReference.occurrenceCount === 1 ? '' : 's'} here.`
+				: `Current file: ${currentLinkFile.path}. No reference to this item was detected here.`;
 			contentEl.createEl('p', { text: hint, cls: 'eagle-delete-modal-hint' });
 		}
 
 		const actionsEl = contentEl.createDiv({ cls: 'eagle-delete-modal-actions' });
 
-		const cancelButton = actionsEl.createEl('button', { text: '取消' });
+		const cancelButton = actionsEl.createEl('button', { text: 'Cancel' });
 		cancelButton.addEventListener('click', () => this.close());
 
 		const currentDeleteLabel = currentLinkMode === 'current-file-links'
-			? '只删除当前文件中的链接'
-			: '只删除当前链接';
+			? 'Remove links from current file only'
+			: 'Remove current link only';
 		const removeCurrentButton = actionsEl.createEl('button', { text: currentDeleteLabel });
 		removeCurrentButton.disabled = !canDeleteCurrent;
 		removeCurrentButton.addEventListener('click', () => {
@@ -298,7 +298,7 @@ class DeleteEagleAttachmentModal extends Modal {
 		});
 
 		const removeCurrentAndAttachmentButton = actionsEl.createEl('button', {
-			text: currentLinkMode === 'current-file-links' ? '删除附件和当前文件中的链接' : '删除附件和当前链接',
+			text: currentLinkMode === 'current-file-links' ? 'Delete item and current file links' : 'Delete item and current link',
 			cls: 'mod-warning',
 		});
 		removeCurrentAndAttachmentButton.disabled = !canDeleteCurrent;
@@ -307,7 +307,7 @@ class DeleteEagleAttachmentModal extends Modal {
 		});
 
 		const removeAllButton = actionsEl.createEl('button', {
-			text: '删除附件并删除所有链接',
+			text: 'Delete item and all links',
 			cls: 'mod-warning',
 		});
 		removeAllButton.addEventListener('click', () => {
@@ -330,25 +330,25 @@ class DeleteEagleAttachmentModal extends Modal {
 				}
 
 				if (removed <= 0) {
-					new Notice('没有删除任何链接，为避免误删，未执行附件删除。');
+					new Notice('No links were removed, so the Eagle item was left untouched.');
 					return;
 				}
 
 				if (mode === 'remove-current-link') {
 					await afterChange?.();
-					new Notice('已删除当前链接。');
+					new Notice('Removed the current link.');
 					this.close();
 					return;
 				}
 
 				const moved = await moveItemToTrash(plugin, itemUrl, item.itemId);
 				if (!moved) {
-					new Notice('Eagle 附件删除失败。');
+					new Notice('Failed to delete the Eagle item.');
 					return;
 				}
 
 				await afterChange?.();
-				new Notice('已删除 Eagle 附件和当前链接。');
+				new Notice('Deleted the Eagle item and the current link.');
 				this.close();
 				return;
 			}
@@ -356,16 +356,16 @@ class DeleteEagleAttachmentModal extends Modal {
 			const removedSummary = await removeAllLinksForItem(plugin, item, itemUrl);
 			const moved = await moveItemToTrash(plugin, itemUrl, item.itemId);
 			if (!moved) {
-				new Notice('Eagle 附件删除失败，未回滚已删除的链接。');
+				new Notice('Failed to delete the Eagle item. Removed links were not rolled back.');
 				return;
 			}
 
 			await afterChange?.();
-			new Notice(`已删除 Eagle 附件，并移除 ${removedSummary.fileCount} 个文件中的 ${removedSummary.mentionCount} 处链接。`);
+			new Notice(`Deleted the Eagle item and removed ${removedSummary.mentionCount} link${removedSummary.mentionCount === 1 ? '' : 's'} from ${removedSummary.fileCount} file${removedSummary.fileCount === 1 ? '' : 's'}.`);
 			this.close();
 		} catch (error) {
 			console.error(error);
-			new Notice('删除操作失败。');
+			new Notice('Delete action failed.');
 		}
 	}
 }
