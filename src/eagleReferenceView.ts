@@ -4,8 +4,8 @@ import * as path from 'path';
 import { App, ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from 'obsidian';
 import MyPlugin from './main';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
-import { resolveEagleItemById } from './eagleItemResolver';
-import { getItemInfoFromLibrary, switchEagleLibrary, updateItemInLibrary } from './eagleApi';
+import { readEagleItemInfoById, resolveEagleItemById, type EagleLocalItemInfo } from './eagleItemResolver';
+import { switchEagleLibrary, updateItemInLibrary } from './eagleApi';
 import { findLibraryProfileByPort } from './libraryProfiles';
 
 const electron = require('electron');
@@ -30,15 +30,6 @@ interface EagleLocalItemMetadata {
 	label: string;
 }
 
-interface EagleLiveItemInfo {
-	id: string;
-	name: string;
-	ext: string;
-	annotation: string;
-	url: string;
-	tags: string[];
-}
-
 interface EagleItemDraft {
 	annotation: string;
 	url: string;
@@ -56,6 +47,8 @@ export interface EagleFileReference {
 export interface EagleItemReference {
 	itemId: string;
 	port: number;
+	libraryAlias: string;
+	libraryLabel: string;
 	displayName: string;
 	ext: string;
 	referenceCount: number;
@@ -279,25 +272,31 @@ function buildItemInfoUrl(itemId: string, port: number): string {
 	return `http://localhost:${port}/images/${itemId}.info`;
 }
 
-async function fetchLiveItemInfo(plugin: MyPlugin, port: number, itemId: string): Promise<EagleLiveItemInfo | null> {
+function formatLibraryLabel(alias: string, port: number): string {
+	const normalizedAlias = alias.trim();
+	if (!normalizedAlias || normalizedAlias === `Port ${port}`) {
+		return `Port ${port}`;
+	}
+
+	return `${normalizedAlias} (Port ${port})`;
+}
+
+function resolveLibraryDisplay(port: number, plugin: MyPlugin): { alias: string; label: string } {
+	const profile = findLibraryProfileByPort(plugin.settings, port);
+	const alias = profile?.alias?.trim() || `Port ${port}`;
+	return {
+		alias,
+		label: formatLibraryLabel(alias, port),
+	};
+}
+
+async function readLocalItemInfo(plugin: MyPlugin, port: number, itemId: string): Promise<EagleLocalItemInfo | null> {
 	const profile = findLibraryProfileByPort(plugin.settings, port);
 	if (!profile?.resolvedPath) {
 		return null;
 	}
 
-	const itemInfo = await getItemInfoFromLibrary(profile, itemId);
-	if (!itemInfo) {
-		return null;
-	}
-
-	return {
-		id: itemInfo.id,
-		name: itemInfo.name,
-		ext: itemInfo.ext,
-		annotation: itemInfo.annotation,
-		url: itemInfo.url,
-		tags: itemInfo.tags,
-	};
+	return readEagleItemInfoById(profile.resolvedPath, itemId);
 }
 
 async function updateLiveItemInfo(plugin: MyPlugin, port: number, itemId: string, draft: EagleItemDraft): Promise<boolean> {
@@ -489,9 +488,12 @@ export class EagleReferenceIndex {
 			for (const [itemId, occurrence] of occurrences) {
 				const libraryPath = findLibraryProfileByPort(this.plugin.settings, occurrence.port)?.resolvedPath ?? '';
 				const metadata = readLocalItemMetadata(itemId, libraryPath, this.metadataCache);
+				const libraryDisplay = resolveLibraryDisplay(occurrence.port, this.plugin);
 				const item = itemBuilders.get(itemId) ?? {
 					itemId,
 					port: occurrence.port,
+					libraryAlias: libraryDisplay.alias,
+					libraryLabel: libraryDisplay.label,
 					displayName: metadata?.label ?? itemId,
 					ext: metadata?.ext ?? '',
 					referenceCount: 0,
@@ -557,7 +559,7 @@ export class EagleReferenceView extends ItemView {
 	private detailsLoading = false;
 	private detailsError = '';
 	private detailsItemId: string | null = null;
-	private itemDetails: EagleLiveItemInfo | null = null;
+	private itemDetails: EagleLocalItemInfo | null = null;
 	private itemDraft: EagleItemDraft | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: MyPlugin) {
@@ -670,7 +672,7 @@ export class EagleReferenceView extends ItemView {
 		const toolbarEl = this.contentEl.createDiv({ cls: 'eagle-ref-toolbar' });
 		const titleGroupEl = toolbarEl.createDiv({ cls: 'eagle-ref-toolbar-group' });
 		titleGroupEl.createDiv({ cls: 'eagle-ref-title', text: 'Eagle 引用视图' });
-		this.statsEl = titleGroupEl.createDiv({ cls: 'eagle-ref-stats' });
+		this.statsEl = null;
 
 		const actionsEl = toolbarEl.createDiv({ cls: 'eagle-ref-toolbar-actions' });
 		const focusCurrentFileButton = actionsEl.createEl('button', {
@@ -754,16 +756,7 @@ export class EagleReferenceView extends ItemView {
 	}
 
 	private updateStats(): void {
-		if (!this.statsEl) {
-			return;
-		}
-
-		if (this.loading && this.snapshot.scannedAt === 0) {
-			this.statsEl.setText('正在扫描 Markdown / Canvas 中的 Eagle 引用...');
-			return;
-		}
-
-		this.statsEl.setText(`已索引 ${this.snapshot.items.length} 个 Eagle 附件，来自 ${this.snapshot.fileToItemIds.size} 个文件。`);
+		this.statsEl?.empty();
 	}
 
 	private updateScopeButtons(): void {
@@ -801,7 +794,10 @@ export class EagleReferenceView extends ItemView {
 
 		return item.references.some((reference) =>
 			reference.fileName.toLocaleLowerCase().includes(query)
-			|| reference.filePath.toLocaleLowerCase().includes(query),
+			|| reference.filePath.toLocaleLowerCase().includes(query)
+			|| item.libraryAlias.toLocaleLowerCase().includes(query)
+			|| item.libraryLabel.toLocaleLowerCase().includes(query)
+			|| String(item.port).includes(query),
 		);
 	}
 
@@ -932,7 +928,7 @@ export class EagleReferenceView extends ItemView {
 				cls: `eagle-ref-chip ${this.selectedItemId === item.itemId ? 'is-selected' : ''}`,
 				text: item.displayName,
 			});
-			chipEl.setAttribute('title', item.itemId);
+			chipEl.setAttribute('title', `${item.libraryLabel}\n${item.itemId}`);
 			chipEl.addEventListener('click', () => {
 				this.selectedItemId = item.itemId;
 				void this.syncSelectedItemDetails();
@@ -962,11 +958,6 @@ export class EagleReferenceView extends ItemView {
 		const summaryTextEl = summaryHeaderEl.createDiv({ cls: 'eagle-ref-summary-text' });
 		summaryTextEl.createEl('h3', {
 			text: this.itemDetails ? `${this.itemDetails.name}${this.itemDetails.ext}` : selectedItem.displayName,
-		});
-		summaryTextEl.createDiv({ cls: 'eagle-ref-item-id', text: selectedItem.itemId });
-		summaryTextEl.createDiv({
-			cls: 'eagle-ref-summary-meta',
-			text: `被 ${selectedItem.referenceCount} 个文件引用，共出现 ${selectedItem.mentionCount} 次。`,
 		});
 
 		const summaryActionsEl = summaryHeaderEl.createDiv({ cls: 'eagle-ref-summary-actions' });
@@ -1014,7 +1005,7 @@ export class EagleReferenceView extends ItemView {
 
 		const detailBodyEl = summaryCardEl.createDiv({ cls: 'eagle-ref-detail-body' });
 		if (this.detailsLoading && !this.itemDraft) {
-			detailBodyEl.createDiv({ cls: 'eagle-ref-empty', text: '正在读取 Eagle 条目详情...' });
+			detailBodyEl.createDiv({ cls: 'eagle-ref-empty', text: '正在读取本地 Eagle 条目详情...' });
 		} else if (this.detailsError) {
 			detailBodyEl.createDiv({ cls: 'eagle-ref-empty', text: this.detailsError });
 		} else {
@@ -1025,6 +1016,7 @@ export class EagleReferenceView extends ItemView {
 				this.itemDetails ? `${this.itemDetails.name}${this.itemDetails.ext}` : selectedItem.displayName,
 			);
 			this.renderReadOnlyField(detailGridEl, '源文件 ID', selectedItem.itemId);
+			this.renderReadOnlyField(detailGridEl, '来源仓库', selectedItem.libraryLabel);
 			this.renderEditableField(detailGridEl, 'Annotation', 'textarea', this.itemDraft?.annotation ?? '', (value) => {
 				if (this.itemDraft) {
 					this.itemDraft.annotation = value;
@@ -1069,7 +1061,12 @@ export class EagleReferenceView extends ItemView {
 		}
 
 		const fileListCardEl = this.detailsEl.createDiv({ cls: 'eagle-ref-card' });
-		fileListCardEl.createDiv({ cls: 'eagle-ref-section-title', text: '引用文件' });
+		const fileListHeaderEl = fileListCardEl.createDiv({ cls: 'eagle-ref-section-header' });
+		fileListHeaderEl.createDiv({ cls: 'eagle-ref-section-title', text: '引用文件' });
+		fileListHeaderEl.createDiv({
+			cls: 'eagle-ref-section-meta',
+			text: `被 ${selectedItem.referenceCount} 个文件引用，共出现 ${selectedItem.mentionCount} 次。`,
+		});
 		const fileListEl = fileListCardEl.createDiv({ cls: 'eagle-ref-file-list' });
 		const activeFilePath = this.getActiveFile()?.path ?? '';
 
@@ -1170,14 +1167,14 @@ export class EagleReferenceView extends ItemView {
 		const token = ++this.detailFetchToken;
 		try {
 			const selectedItem = this.snapshot.itemsById.get(itemId);
-			const liveInfo = selectedItem ? await fetchLiveItemInfo(this.plugin, selectedItem.port, itemId) : null;
+			const liveInfo = selectedItem ? await readLocalItemInfo(this.plugin, selectedItem.port, itemId) : null;
 			if (token !== this.detailFetchToken) {
 				return;
 			}
 
 			if (!liveInfo) {
 				this.detailsLoading = false;
-				this.detailsError = '无法从 Eagle 读取该附件的实时详情，请确认 Eagle 正在运行。';
+				this.detailsError = '无法从本地 Eagle 库读取该附件详情，请确认对应仓库路径可用。';
 				this.renderDetails();
 				return;
 			}
@@ -1197,7 +1194,7 @@ export class EagleReferenceView extends ItemView {
 			}
 
 			this.detailsLoading = false;
-			this.detailsError = '读取 Eagle 实时详情失败。';
+			this.detailsError = '读取本地 Eagle 条目详情失败。';
 			this.renderDetails();
 		}
 	}
@@ -1233,14 +1230,7 @@ export class EagleReferenceView extends ItemView {
 			return;
 		}
 
-		const details = this.itemDetails ?? await fetchLiveItemInfo(this.plugin, selectedItem.port, selectedItemId);
-		if (!details) {
-			new Notice('无法读取 Eagle 文件路径。');
-			return;
-		}
-
-		this.itemDetails = details;
-		const filePath = await resolveLocalFilePath(this.plugin, details.id, selectedItem.port);
+		const filePath = await resolveLocalFilePath(this.plugin, selectedItem.itemId, selectedItem.port);
 		if (!filePath || !fs.existsSync(filePath)) {
 			new Notice('找不到本地源文件，请确认 Eagle 库路径设置正确。');
 			return;

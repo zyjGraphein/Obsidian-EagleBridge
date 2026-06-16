@@ -783,6 +783,8 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-ref-summary-header {
     gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 78%, transparent);
 }
 
 .eagle-ref-summary-actions {
@@ -796,6 +798,10 @@ If your plugin does not need CSS, delete this file.
 
 .eagle-ref-detail-body {
     margin-top: 14px;
+}
+
+.eagle-ref-card .eagle-ref-section-header {
+    margin-bottom: 12px;
 }
 
 .eagle-ref-detail-grid {
