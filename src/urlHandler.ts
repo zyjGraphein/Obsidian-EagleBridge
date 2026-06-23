@@ -57,6 +57,16 @@ export type UploadSurface = 'markdown' | 'canvas';
 type UploadContentType = 'image' | 'video' | 'website' | 'other';
 export type MarkdownTransferKind = 'paste' | 'drop';
 
+export interface EagleBridgeGeneratedImageStoreInput {
+	data: ArrayBuffer;
+	suggestedFileName: string;
+	anchor?: UploadTargetMenuAnchor | null;
+}
+
+export type EagleBridgeGeneratedImageStoreResult =
+	| { kind: 'eagle-link'; url: string }
+	| { kind: 'obsidian-default' };
+
 interface UploadTargetSelectionOptions {
 	anchor?: UploadTargetMenuAnchor | null;
 	allowObsidianDefault?: boolean;
@@ -73,6 +83,11 @@ export interface ResolvedEagleLink {
 	isImage: boolean;
 	port: number;
 	profileId: string;
+}
+
+interface ObEcraftTransferIntegrationApiV1 {
+	version: 1;
+	shouldEagleDeferMarkdownTransfer(): boolean;
 }
 
 export function getNativeTransferFilePath(file: File): string | null {
@@ -105,6 +120,32 @@ function getTransferFilePreferenceScore(file: File, pluginInstance?: MyPlugin): 
 	}
 
 	return findLibraryProfileByFilePath(pluginInstance.settings, filePath) ? 2 : 1;
+}
+
+function getObEcraftTransferIntegrationApi(pluginInstance: MyPlugin): ObEcraftTransferIntegrationApiV1 | null {
+	const candidate = (pluginInstance.app as {
+		plugins?: {
+			plugins?: Record<string, unknown>;
+		};
+	}).plugins?.plugins?.obEcraft as {
+		transferIntegrationApi?: ObEcraftTransferIntegrationApiV1;
+	} | undefined;
+	if (candidate?.transferIntegrationApi?.version !== 1) {
+		return null;
+	}
+	return candidate.transferIntegrationApi;
+}
+
+function shouldDeferMarkdownTransferToObEcraft(pluginInstance: MyPlugin): boolean {
+	const api = getObEcraftTransferIntegrationApi(pluginInstance);
+	if (api === null) {
+		return false;
+	}
+	try {
+		return api.shouldEagleDeferMarkdownTransfer() === true;
+	} catch {
+		return false;
+	}
 }
 
 function pickPreferredTransferFile(existingFile: File, nextFile: File, pluginInstance?: MyPlugin): File {
@@ -315,6 +356,9 @@ export function shouldTrackMarkdownDragCursor(
 	dragEvent: DragEvent,
 	pluginInstance: MyPlugin,
 ): boolean {
+	if (shouldDeferMarkdownTransferToObEcraft(pluginInstance)) {
+		return false;
+	}
 	const dataTransfer = dragEvent.dataTransfer;
 	if (!dataTransfer) {
 		return false;
@@ -429,6 +473,31 @@ async function createObsidianDefaultEmbedsForFiles(
 
 function createObsidianDefaultEmbedForUrl(url: string): string[] {
 	return [url];
+}
+
+function sanitizeGeneratedImageFileName(fileName: string): string {
+	const fallbackName = `image-${Date.now()}.png`;
+	const baseName = path.basename(fileName.trim() || fallbackName);
+	const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
+	if (!sanitized) {
+		return fallbackName;
+	}
+	if (path.extname(sanitized)) {
+		return sanitized;
+	}
+	return `${sanitized}.png`;
+}
+
+async function writeGeneratedImageTempFile(fileName: string, data: ArrayBuffer): Promise<string> {
+	const uploadDir = path.join(os.tmpdir(), 'obsidian-uploads');
+	if (!fs.existsSync(uploadDir)) {
+		fs.mkdirSync(uploadDir, { recursive: true });
+	}
+	const safeFileName = sanitizeGeneratedImageFileName(fileName);
+	const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeFileName}`;
+	const tempFilePath = path.join(uploadDir, uniqueFileName);
+	await fs.promises.writeFile(tempFilePath, Buffer.from(data));
+	return tempFilePath;
 }
 
 function buildLibraryLink(filePath: string, profile: ResolvedEagleLibraryProfile): ResolvedEagleLink {
@@ -562,6 +631,41 @@ export async function resolveTransferFilesToEagleLinks(
 	return resolvedLinks;
 }
 
+export async function resolveGeneratedImageStore(
+	input: EagleBridgeGeneratedImageStoreInput,
+	pluginInstance: MyPlugin,
+): Promise<EagleBridgeGeneratedImageStoreResult | null> {
+	try {
+		let preferredUploadTarget: ResolvedEagleLibraryProfile | null | undefined;
+		if (pluginInstance.settings.externalUploadMode === 'askEveryTime') {
+			const selection = await selectUploadTargetProfile(pluginInstance, {
+				anchor: input.anchor ?? null,
+				allowObsidianDefault: true,
+			});
+			if (selection === 'obsidian-default') {
+				return { kind: 'obsidian-default' };
+			}
+			preferredUploadTarget = selection;
+		}
+
+		const tempFilePath = await writeGeneratedImageTempFile(input.suggestedFileName, input.data);
+		try {
+			const resolvedLink = await resolveFilePathToEagleLink(tempFilePath, pluginInstance, preferredUploadTarget);
+			return {
+				kind: 'eagle-link',
+				url: resolvedLink.url,
+			};
+		} finally {
+			void fs.promises.unlink(tempFilePath).catch(() => undefined);
+		}
+	} catch (error) {
+		if (toErrorMessage(error) === 'UPLOAD_TARGET_CANCELLED') {
+			return null;
+		}
+		throw error;
+	}
+}
+
 export async function resolveMarkdownTransfer(
 	dataTransfer: DataTransfer | null | undefined,
 	kind: MarkdownTransferKind,
@@ -653,6 +757,9 @@ export async function handlePasteEvent(
 	if (clipboardEvent.defaultPrevented) {
 		return;
 	}
+	if (shouldDeferMarkdownTransferToObEcraft(pluginInstance)) {
+		return;
+	}
 
 	const clipboardData = clipboardEvent.clipboardData;
 	if (!canResolveMarkdownTransfer(clipboardData, 'paste', pluginInstance)) {
@@ -708,6 +815,9 @@ export async function handleDropEvent(
 	pluginInstance: MyPlugin,
 ) {
 	if (dropEvent.defaultPrevented) {
+		return;
+	}
+	if (shouldDeferMarkdownTransferToObEcraft(pluginInstance)) {
 		return;
 	}
 

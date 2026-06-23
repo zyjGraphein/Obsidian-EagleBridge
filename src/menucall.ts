@@ -11,6 +11,11 @@ import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 import { readEagleItemInfoById, resolveEagleItemById } from './eagleItemResolver';
 import { extractEagleLinkTarget, findLibraryProfileByPort } from './libraryProfiles';
 import { switchEagleLibrary, updateItemInLibrary } from './eagleApi';
+import {
+	resolveGeneratedImageStore,
+	type EagleBridgeGeneratedImageStoreInput,
+	type EagleBridgeGeneratedImageStoreResult,
+} from './urlHandler';
 
 const electron = require('electron');
 const shell = electron.shell as {
@@ -70,6 +75,18 @@ function isEagleInfoUrl(url: string): boolean {
     return /^http:\/\/localhost:\d+\/images\/[^/\s?#]+\.info$/i.test(url);
 }
 
+function isObEcraftManagedContextTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof HTMLElement)) {
+		return false;
+	}
+	if (target.dataset.obecraftSourcePath !== undefined) {
+		return true;
+	}
+	return target.closest(
+		'.obecraft-floating-layer, .obecraft-floating-image-container, .obecraft-grid-widget, .obecraft-grid-slot, .obecraft-markdown-image-widget',
+	) !== null;
+}
+
 export interface EagleBridgeMenuContext {
 	url: string;
 	mode: 'source' | 'preview';
@@ -85,6 +102,7 @@ export interface EagleBridgeIntegrationApiV1 {
 	appendContextMenuItems(menu: Menu, context: EagleBridgeMenuContext): Promise<boolean>;
 	canResolveMarkdownTransfer?: (data: DataTransfer, kind: EagleBridgeTransferKind) => boolean;
 	resolveMarkdownTransfer?: (data: DataTransfer, kind: EagleBridgeTransferKind) => Promise<string[] | null>;
+	storeGeneratedImage?: (input: EagleBridgeGeneratedImageStoreInput) => Promise<EagleBridgeGeneratedImageStoreResult | null>;
 }
 
 function resolveProfileForUrl(plugin: MyPlugin, url: string) {
@@ -180,6 +198,7 @@ export function handleLinkClick(plugin: MyPlugin, event: MouseEvent, url: string
 }
 
 export function eagleImageContextMenuCall(this: MyPlugin, event: MouseEvent) {
+	if (isObEcraftManagedContextTarget(event.target)) return;
 	const img = event.target as HTMLImageElement;
 	const inTable: boolean = img.closest('table') != null;
 	const inCallout: boolean = img.closest('.callout') != null;
@@ -204,6 +223,9 @@ function resolveEagleUrlFromContextMenuEvent(plugin: MyPlugin, event: MouseEvent
     if (!target) {
         return null;
     }
+	if (isObEcraftManagedContextTarget(target)) {
+		return null;
+	}
 
     const iframeTarget = target.closest('iframe') as HTMLIFrameElement | null;
     if (iframeTarget?.src && isEagleInfoUrl(iframeTarget.src)) {
@@ -296,6 +318,9 @@ export function createEagleBridgeIntegrationApi(plugin: MyPlugin): EagleBridgeIn
 			}
 			await appendEagleImageMenuSourceItems(plugin, menu, context.url, context);
 			return true;
+		},
+		storeGeneratedImage: async (input: EagleBridgeGeneratedImageStoreInput) => {
+			return resolveGeneratedImageStore(input, plugin);
 		},
 	};
 }
