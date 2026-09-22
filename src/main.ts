@@ -1,4 +1,4 @@
-import { Menu,MenuItem,App, Editor, MarkdownView, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
+import { Menu,MenuItem,App, Editor, MarkdownView, MarkdownPostProcessorContext, MarkdownRenderChild, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
 import { refreshServers, stopServers } from './server';
 import { canResolveMarkdownTransfer, handlePasteEvent, handleDropEvent, resolveMarkdownTransfer, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
 import { onElement } from './onElement';
@@ -12,9 +12,8 @@ import {
 import { MyPluginSettings, DEFAULT_SETTINGS, SampleSettingTab, isAppendPageTagsMode, isImportEagleTagsMode, normalizeAttachmentTagSyncMode, normalizeExternalUploadMode, normalizeUploadSettings, shouldReplacePageTagsInEagle } from './setting';
 import { handleImageClick, removeZoomedImage } from './Leftclickimage';
 import { handleLinkClick, eagleImageContextMenuCall, eagleLinkContextMenuCall, createEagleBridgeIntegrationApi, type EagleBridgeIntegrationApiV1 } from './menucall';
-import { isAltTextImage, isURL, isLocalHostLink} from './embed';
 import { embedManager } from './embed';
-import { embedField } from './embed-state-field';
+import { embedField, editingEmbedField } from './embed-state-field';
 import { Extension } from "@codemirror/state";
 import { registerCanvasAutoNormalize, registerCanvasDocument } from './canvasHandler';
 import { FileTagSyncState, getFileTagSyncState, mergeItemTagsIntoFileFrontmatter, syncTagsToTargets } from './synchronizedpagetabs';
@@ -95,15 +94,15 @@ export default class MyPlugin extends Plugin {
 		});
 		
 		// 注册编辑器扩展，务必正确导入和注册
-		this.registerEditorExtension([embedField]);
+		this.registerEditorExtension([editingEmbedField, embedField]);
 		
 		// 处理预览模式
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			const images = el.querySelectorAll('img');
 			images.forEach((image) => {
-				if (embedManager.shouldEmbed(image.src)) {
+				if (!image.closest('.eagle-embed-container') && embedManager.shouldEmbed(image.src, image.alt)) {
 					print(`MarkdownPostProcessor 找到可嵌入图像: ${image.src}`);
-					this.handleImage(image);
+					this.handleImage(image, ctx);
 				}
 			});
 		});
@@ -111,9 +110,9 @@ export default class MyPlugin extends Plugin {
 		// 注册外部文件支持
 		// 注册图片右键菜单事件
 		this.registerDocument(document);
-		this.app.workspace.on("window-open", (workspaceWindow, window) => {
+		this.registerEvent(this.app.workspace.on("window-open", (workspaceWindow, window) => {
 			this.registerDocument(window.document);
-		});
+		}));
 		// 在插件加载时启动所有有效库的本地预览服务
 		await this.refreshLibraryProfilesAndServers(false);
 		registerCanvasAutoNormalize(this);
@@ -208,54 +207,11 @@ export default class MyPlugin extends Plugin {
 		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
 			const target = event.target as HTMLElement;
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-			if (!activeView) {
-				print('Cannot find the active view');
+			// Source-mode clicks belong to the editor, including image names and sizes.
+			if (!activeView || activeView.getMode() !== 'preview' || target.closest('.cm-editor')) {
 				return;
 			}
-
-			const inPreview = activeView.getMode() === "preview";
-			let url: string | null = null;
-
-			if (inPreview) {
-				if (!target.matches("a.external-link")) {
-					return;
-				}
-
-				const linkElement = target as HTMLAnchorElement;
-				if (linkElement && linkElement.href) {
-					url = linkElement.href;
-					print(`Preview mode link: ${url}`);
-				}
-			} else {
-				if (!target.matches("span.external-link, .cm-link, a.cm-underline")) {
-					return;
-				}
-
-				const editor = activeView.editor;
-				const cursor = editor.getCursor();
-				const lineText = editor.getLine(cursor.line);
-				const urlMatches = Array.from(lineText.matchAll(/\bhttps?:\/\/[^\s)]+/g));
-				print(urlMatches);
-				let closestUrl = null;
-				let minDistance = Infinity;
-				const cursorPos = cursor.ch;
-				print(cursorPos);
-
-				for (let i = 0; i < urlMatches.length; i++) {
-					const match = urlMatches[i];
-					const end = (match.index || 0) + match[0].length + 1;
-					if (cursorPos <= end) {
-						closestUrl = match[0];
-						print(`Cursor is in the link interval: ${i + 1}`);
-						break;
-					}
-				}
-
-				if (closestUrl) {
-					url = closestUrl;
-					print(`Edit mode link: ${url}`);
-				}
-			}
+			const url = target.closest<HTMLAnchorElement>('a.external-link')?.href;
 
 			if (url && url.match(/^http:\/\/localhost:\d+\/images\/[^.]+\.info$/)) {
 				event.preventDefault();
@@ -310,6 +266,22 @@ export default class MyPlugin extends Plugin {
 				height: 500px;
 				border: none;
 			}
+
+			.eagle-embed-container video,
+			.eagle-embed-container audio {
+				display: block;
+				width: 100%;
+				max-height: 70vh;
+			}
+
+			.eagle-embed-container img {
+				display: block;
+				max-width: 100%;
+			}
+
+			.eagle-embed-block {
+				margin: 0;
+			}
 			
 			/* 编辑模式样式 */
 			.cm-embed-block {
@@ -338,6 +310,7 @@ export default class MyPlugin extends Plugin {
 			}
 		`;
 		document.head.appendChild(style);
+		this.register(() => style.remove());
 
 	}
 	
@@ -515,52 +488,24 @@ export default class MyPlugin extends Plugin {
 			onElement(
 				document,
 				"contextmenu",
-				"a.external-link, span.external-link, .cm-link, a.cm-underline, iframe",
+				"a.external-link, span.external-link, .cm-link, a.cm-underline, iframe, .eagle-embed-container video, .eagle-embed-container audio",
 				eagleLinkContextMenuCall.bind(this),
 				{ capture: true }
 			)
 		);
 		registerCanvasDocument(this, document);
 	}
-	handleImage(img: HTMLImageElement): HTMLElement | null {
+	handleImage(img: HTMLImageElement, ctx: MarkdownPostProcessorContext): HTMLElement | null {
 		try {
-			const alt = img.alt || "";
-			const src = img.src;
-			
-			// print(`处理图像: ${src} 替代文本: ${alt}`);
-			
-			// 检查是否有 noembed 标记
-			if (/noembed/i.test(alt)) {
-				img.alt = alt.replace(/noembed/i, "").trim();
-				// print("跳过嵌入: 图像标记为noembed");
-				return null;
-			}
-			
-			// 检查alt文本是否表示图片类型
-			if (isAltTextImage(alt)) {
-				// print(`根据alt文本识别为图片，跳过: ${alt}`);
-				return null;
-			}
-			
-			// 检查是否应该嵌入
-			if (!isURL(src) || !embedManager.shouldEmbed(src, alt)) {
-				// print("跳过嵌入: 不是有效URL或不应嵌入");
-				return null;
-			}
-			
-			// print(`创建嵌入内容: ${src}`);
-			const embedResult = embedManager.create(src);
+			if (!img.parentElement || !embedManager.shouldEmbed(img.src, img.alt)) return null;
+			const embedResult = embedManager.create(img.src, img.alt, img.ownerDocument);
 			const container = embedResult.containerEl;
-			
-			if (!img.parentElement) {
-				// print("错误: 图像没有父元素");
-				return null;
-			}
-			
-			// 使用替换方法
-			img.parentElement.replaceChild(container, img);
-			
-			
+			const wrapper = img.closest('.image-embed');
+			const target = wrapper && wrapper.querySelectorAll('img').length === 1 ? wrapper : img;
+			target.replaceWith(container);
+			const child = new MarkdownRenderChild(container);
+			child.register(embedResult.destroy);
+			ctx.addChild(child);
 			return container;
 		} catch (error) {
 			console.error("处理图像时出错:", error);

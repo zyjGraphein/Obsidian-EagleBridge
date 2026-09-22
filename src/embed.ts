@@ -1,80 +1,143 @@
-// URL 检测函数
 export function isURL(str: string): boolean {
-    let url: URL;
-
     try {
-        url = new URL(str);
+        return /^(https?:)$/.test(new URL(str).protocol);
     } catch {
         return false;
     }
-    
-    return url.protocol === "http:" || url.protocol === "https:";
 }
 
-
-// 检查是否为本地主机链接
 export function isLocalHostLink(str: string): boolean {
     try {
         const url = new URL(str);
-        return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+        return isURL(str) && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
     } catch {
         return false;
     }
 }
 
-
-// 检查Alt文本是否表示图片类型（增强版）
 export function isAltTextImage(alt: string): boolean {
-    // 首先处理可能包含尺寸的情况，如 "image.png|700"
-    const mainPart = alt.split('|')[0].trim();
-    if (!mainPart) {
-        return false;
-    }
-    return /^.+?\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)(?=$|[\s#\[{(])/i.test(mainPart);
+    return /^.+?\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|ico)(?=$|[\s#\[{(])/i.test(alt.split('|')[0].trim());
 }
 
-// 基本嵌入数据结构
 export interface EmbedResult {
     containerEl: HTMLElement;
-    iframeEl?: HTMLIFrameElement;
+    destroy(): void;
 }
 
-// 本地链接嵌入处理器
+type EmbedKind = 'video' | 'audio' | 'image' | 'iframe';
+
+function mediaKindFromName(name: string): 'video' | 'audio' | null {
+    const filename = name.split('|')[0].trim();
+    if (/\.(mp4|m4v|webm|mov|ogv|mkv)(?=$|[\s#?])/i.test(filename)) return 'video';
+    if (/\.(mp3|m4a|ogg|wav|flac|aac|opus)(?=$|[\s#?])/i.test(filename)) return 'audio';
+    return null;
+}
+
 export class LocalHostEmbedder {
-    // 创建嵌入内容
-    create(src: string): EmbedResult {
-        const container = document.createElement('div');
-        container.className = "eagle-embed-container";
-        
-        // 创建 iframe 元素
-        const iframe = document.createElement('iframe');
-        iframe.src = src;
-        iframe.width = "100%";
-        iframe.height = "500px"; // 增加高度以适应更多内容
-        iframe.style.border = "none";
-        iframe.setAttribute("allowfullscreen", "true");
-        iframe.setAttribute("loading", "lazy");
-        
-        container.appendChild(iframe);
-        
-        return { 
+    create(src: string, alt = '', doc: Document = document, onResize: () => void = () => {}): EmbedResult {
+        const container = doc.createElement('div');
+        container.className = 'eagle-embed-container';
+        const content = container.appendChild(doc.createElement('div'));
+        content.className = 'eagle-embed-content';
+        const abort = new AbortController();
+        let disposed = false;
+        let media: HTMLMediaElement | undefined;
+        let image: HTMLImageElement | undefined;
+        let iframe: HTMLIFrameElement | undefined;
+        const resizeObserver = new ResizeObserver(() => {
+            if (media && !container.getClientRects().length) media.pause();
+            onResize();
+        });
+        resizeObserver.observe(container);
+
+        const showError = () => {
+            if (disposed) return;
+            const link = doc.createElement('a');
+            link.className = 'external-link';
+            link.href = src;
+            link.textContent = `无法预览，打开 ${alt.split('|')[0] || '附件'}`;
+            content.replaceChildren(link);
+            onResize();
+        };
+
+        const render = (kind: EmbedKind) => {
+            if (disposed) return;
+            let element: HTMLElement;
+            if (kind === 'video' || kind === 'audio') {
+                media = doc.createElement(kind);
+                media.controls = true;
+                media.autoplay = false;
+                media.preload = 'metadata';
+                if (kind === 'video') media.setAttribute('playsinline', '');
+                media.onloadedmetadata = onResize;
+                media.onerror = showError;
+                media.src = src;
+                element = media;
+            } else if (kind === 'image') {
+                image = doc.createElement('img');
+                image.alt = alt;
+                image.onload = onResize;
+                image.onerror = showError;
+                image.src = src;
+                element = image;
+            } else {
+                iframe = doc.createElement('iframe');
+                iframe.src = src;
+                iframe.allow = "autoplay 'none'";
+                iframe.allowFullscreen = true;
+                iframe.setAttribute('loading', 'lazy');
+                iframe.onerror = showError;
+                element = iframe;
+            }
+            content.replaceChildren(element);
+            onResize();
+        };
+
+        const mediaKind = mediaKindFromName(alt) || mediaKindFromName(new URL(src).pathname);
+        if (mediaKind) {
+            render(mediaKind);
+        } else {
+            // Eagle URLs end in .info. Empty/custom alt text needs the real MIME type;
+            // opening a raw video URL in an iframe would start the browser's media player.
+            content.textContent = '加载预览…';
+            void fetch(src, { method: 'HEAD', redirect: 'manual', signal: abort.signal }).then(response => {
+                // Eagle bookmarks redirect to websites, which remain iframe embeds.
+                if (response.type === 'opaqueredirect') return render('iframe');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const type = response.headers.get('content-type')?.toLowerCase() || '';
+                render(type.startsWith('video/') ? 'video' : type.startsWith('audio/') ? 'audio'
+                    : type.startsWith('image/') ? 'image' : 'iframe');
+            }).catch(showError);
+        }
+
+        return {
             containerEl: container,
-            iframeEl: iframe
+            destroy() {
+                disposed = true;
+                abort.abort();
+                resizeObserver.disconnect();
+                if (media) {
+                    media.onloadedmetadata = media.onerror = null;
+                    media.pause();
+                    media.removeAttribute('src');
+                    media.load();
+                }
+                if (image) {
+                    image.onload = image.onerror = null;
+                    image.removeAttribute('src');
+                }
+                if (iframe) {
+                    iframe.onerror = null;
+                    iframe.src = 'about:blank';
+                }
+            },
         };
     }
 
-    // 检查是否应该嵌入此链接
-    shouldEmbed(src: string, alt?: string): boolean {
-        // 如果提供了alt文本且表示图片，跳过嵌入
-        if (alt && isAltTextImage(alt)) {
-            console.log(`[Eagle-Embed] 跳过图片嵌入: ${alt}, URL: ${src}`);
-            return false;
-        }
-        
-        // 确认是localhost链接
-        return isLocalHostLink(src);
+    shouldEmbed(src: string, alt = ''): boolean {
+        return isLocalHostLink(src) && !/noembed/i.test(alt)
+            && !isAltTextImage(alt) && !isAltTextImage(new URL(src).pathname);
     }
 }
 
-// 嵌入管理器
 export const embedManager = new LocalHostEmbedder();

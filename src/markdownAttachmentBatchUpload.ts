@@ -11,14 +11,16 @@ import {
 	type Reference,
 } from 'obsidian';
 import type MyPlugin from './main';
-import { isPathInsideDirectory } from './eaglePaths';
 import { findLibraryProfileByFilePath } from './libraryProfiles';
 import { resolveFilePathToEagleLink, type ResolvedEagleLink } from './urlHandler';
+import { trackAttachmentReferenceChanges, verifyImportedAttachment } from './attachmentMigrationSafety';
+import { getCurrentPageTags } from './synchronizedpagetabs';
 
 const NON_ATTACHMENT_EXTENSIONS = new Set(['md', 'canvas', 'base']);
 const WIKILINK_REGEX = /^(!?)\[\[([\s\S]*?)\]\]$/;
 const MARKDOWN_LINK_REGEX = /^(!?)\[([\s\S]*?)\]\(([\s\S]*?)\)$/;
 const IMAGE_SIZE_REGEX = /^\d+(?:x\d+)?$/i;
+const runningUploads = new WeakSet<MyPlugin>();
 
 interface ParsedOriginalReference {
 	embed: boolean;
@@ -38,6 +40,7 @@ interface AttachmentOccurrence {
 interface AttachmentTargetPlan {
 	sourceFile: TFile;
 	absolutePath: string;
+	sourceStats: { size: number; mtimeMs: number };
 	occurrences: AttachmentOccurrence[];
 	otherMarkdownReferences: TFile[];
 	otherCanvasReferences: TFile[];
@@ -49,6 +52,7 @@ interface AttachmentBatchPlan {
 	file: TFile;
 	originalContent: string;
 	targets: AttachmentTargetPlan[];
+	referenceCheckComplete: boolean;
 }
 
 interface DeletionSkipInfo {
@@ -77,6 +81,29 @@ interface UploadExecutionStats {
 }
 
 export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin): Promise<void> {
+	if (runningUploads.has(plugin)) {
+		new Notice('附件上传仍在进行，请等待完成。');
+		return;
+	}
+	runningUploads.add(plugin);
+	const progress = new Notice('正在检查当前文档的附件…', 0);
+	const referenceChanges = trackAttachmentReferenceChanges(plugin);
+	try {
+		await runAttachmentUpload(plugin, progress, referenceChanges);
+	} catch (error) {
+		new Notice(`附件迁移未完成：${error instanceof Error ? error.message : String(error)}`, 10000);
+	} finally {
+		referenceChanges.dispose();
+		progress.hide();
+		runningUploads.delete(plugin);
+	}
+}
+
+async function runAttachmentUpload(
+	plugin: MyPlugin,
+	progress: Notice,
+	referenceChanges: ReturnType<typeof trackAttachmentReferenceChanges>,
+): Promise<void> {
 	const activeFile = plugin.app.workspace.getActiveFile();
 	if (!(activeFile instanceof TFile) || activeFile.extension !== 'md') {
 		new Notice('请先打开一个 Markdown 文档。');
@@ -87,6 +114,7 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 		new Notice('该命令仅支持桌面端文件系统仓库。');
 		return;
 	}
+	const uploadTags = getCurrentPageTags(plugin.app, plugin.settings);
 
 	let plan: AttachmentBatchPlan;
 	try {
@@ -118,19 +146,27 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 		reusedCount: 0,
 	};
 
-	try {
-		for (const target of plan.targets) {
-			const resolvedLink = await resolveFilePathToEagleLink(target.absolutePath, plugin);
+	const uploadErrors: string[] = [];
+	for (const [index, target] of plan.targets.entries()) {
+		progress.setMessage(`正在上传 ${index + 1}/${plan.targets.length}：${target.sourceFile.name}`);
+		try {
+			const resolvedLink = await resolveFilePathToEagleLink(target.absolutePath, plugin, undefined, uploadTags);
 			resolvedLinks.set(target.sourceFile.path, resolvedLink);
 			if (target.sourceAlreadyInEagleLibrary) {
 				uploadStats.reusedCount += 1;
 			} else {
 				uploadStats.uploadedCount += 1;
 			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			uploadErrors.push(`${target.sourceFile.name}：${message}`);
+			if (message === 'UPLOAD_TARGET_CANCELLED') break;
 		}
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		new Notice(`上传到 Eagle 失败，正文未修改，源附件未删除。失败原因：${message}`, 10000);
+	}
+	if (uploadErrors.length > 0) {
+		new Notice(`以下附件未迁移，原引用与文件保留：\n${uploadErrors.join('\n')}`, 15000);
+	}
+	if (resolvedLinks.size === 0) {
 		return;
 	}
 
@@ -141,6 +177,8 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 	}
 
 	try {
+		progress.setMessage('正在写入 Eagle 链接…');
+		referenceChanges.setWritingFile(activeFile);
 		await plugin.app.vault.process(activeFile, (currentContent) => {
 			if (currentContent !== plan.originalContent) {
 				throw new Error('SOURCE_FILE_CHANGED');
@@ -162,19 +200,29 @@ export async function uploadCurrentMarkdownAttachmentsToEagle(plugin: MyPlugin):
 
 		new Notice(`写入 Eagle 回链失败，原附件未删除。失败原因：${message}`, 10000);
 		return;
+	} finally {
+		referenceChanges.setWritingFile(null);
 	}
 
 	const deletionSkips: DeletionSkipInfo[] = [];
 	let deletedCount = 0;
 	for (const target of plan.targets) {
-		if (!canDeleteOriginalAttachment(target)) {
+		const resolvedLink = resolvedLinks.get(target.sourceFile.path);
+		if (!resolvedLink) continue;
+		progress.setMessage(`正在核对 Eagle 副本与引用：${target.sourceFile.name}`);
+		const safetyError = !plan.referenceCheckComplete
+			? '部分文档或 Canvas 的引用信息无法读取，已保留源附件。'
+			: referenceChanges.hasChanged()
+				? '上传期间其他文档或引用已发生变化，已保留源附件。'
+				: await verifyImportedAttachment(plugin, target.absolutePath, target.sourceStats, resolvedLink);
+		if (!canDeleteOriginalAttachment(target) || safetyError || referenceChanges.hasChanged()) {
 			deletionSkips.push({
 				sourceFile: target.sourceFile,
 				otherMarkdownReferences: target.otherMarkdownReferences,
 				otherCanvasReferences: target.otherCanvasReferences,
 				remainingCurrentReferences: target.remainingCurrentReferences,
 				sourceAlreadyInEagleLibrary: target.sourceAlreadyInEagleLibrary,
-				deletionError: null,
+				deletionError: safetyError ?? (referenceChanges.hasChanged() ? '引用已发生变化，已保留源附件。' : null),
 			});
 			continue;
 		}
@@ -226,7 +274,7 @@ async function buildAttachmentBatchPlan(
 
 	const occurrences = collectAttachmentOccurrences(app, file, fileCache, originalContent);
 	const currentReferenceCounts = collectCurrentAttachmentReferenceCounts(app, file, fileCache);
-	const canvasReferenceIndex = await buildCanvasAttachmentReferenceIndex(app);
+	const { index: canvasReferenceIndex, complete: canvasCheckComplete } = await buildCanvasAttachmentReferenceIndex(app);
 	const adapter = app.vault.adapter;
 	if (!(adapter instanceof FileSystemAdapter)) {
 		throw new Error('FILESYSTEM_ADAPTER_REQUIRED');
@@ -248,6 +296,7 @@ async function buildAttachmentBatchPlan(
 		targetsByPath.set(occurrence.sourceFile.path, {
 			sourceFile: occurrence.sourceFile,
 			absolutePath,
+			sourceStats: await fs.promises.stat(absolutePath),
 			occurrences: [occurrence],
 			otherMarkdownReferences: getOtherMarkdownReferences(app, file, occurrence.sourceFile),
 			otherCanvasReferences: canvasReferenceIndex.get(occurrence.sourceFile.path) ?? [],
@@ -264,6 +313,7 @@ async function buildAttachmentBatchPlan(
 	return {
 		file,
 		originalContent,
+		referenceCheckComplete: canvasCheckComplete && app.vault.getMarkdownFiles().every((entry) => Boolean(app.metadataCache.getFileCache(entry))),
 		targets: Array.from(targetsByPath.values()).sort((left, right) => {
 			const leftOffset = left.occurrences[0]?.startOffset ?? Number.MAX_SAFE_INTEGER;
 			const rightOffset = right.occurrences[0]?.startOffset ?? Number.MAX_SAFE_INTEGER;
@@ -324,11 +374,7 @@ function collectCurrentAttachmentReferenceCounts(
 	cache: CachedMetadata,
 ): Map<string, number> {
 	const counts = new Map<string, number>();
-	const references: Reference[] = [
-		...(cache.links ?? []),
-		...(cache.embeds ?? []),
-		...(cache.frontmatterLinks ?? []),
-	];
+	const references = getAttachmentReferences(cache);
 
 	for (const reference of references) {
 		const resolvedFile = resolveAttachmentFile(app, file, reference);
@@ -342,7 +388,21 @@ function collectCurrentAttachmentReferenceCounts(
 	return counts;
 }
 
-function resolveAttachmentFile(app: App, sourceFile: TFile, reference: Reference): TFile | null {
+function getAttachmentReferences(cache: CachedMetadata): Array<Pick<Reference, 'link'>> {
+	const propertyPaths: Array<{ link: string }> = [];
+	const visit = (value: unknown, depth: number): void => {
+		if (depth > 8) return;
+		if (typeof value === 'string') propertyPaths.push({ link: value });
+		else if (value && typeof value === 'object') {
+			for (const child of Object.values(value)) visit(child, depth + 1);
+		}
+	};
+	// Automation tools also store plain attachment paths in YAML properties.
+	visit(cache.frontmatter, 0);
+	return [...(cache.links ?? []), ...(cache.embeds ?? []), ...(cache.frontmatterLinks ?? []), ...propertyPaths];
+}
+
+function resolveAttachmentFile(app: App, sourceFile: TFile, reference: Pick<Reference, 'link'>): TFile | null {
 	const resolvedFile = app.metadataCache.getFirstLinkpathDest(reference.link, sourceFile.path);
 	if (!(resolvedFile instanceof TFile)) {
 		return null;
@@ -368,11 +428,7 @@ function getOtherMarkdownReferences(app: App, sourceFile: TFile, targetFile: TFi
 			continue;
 		}
 
-		const references: Reference[] = [
-			...(fileCache.links ?? []),
-			...(fileCache.embeds ?? []),
-			...(fileCache.frontmatterLinks ?? []),
-		];
+		const references = getAttachmentReferences(fileCache);
 
 		const hasReference = references.some((reference) => {
 			const resolvedFile = app.metadataCache.getFirstLinkpathDest(reference.link, markdownFile.path);
@@ -387,8 +443,9 @@ function getOtherMarkdownReferences(app: App, sourceFile: TFile, targetFile: TFi
 	return referencingFiles.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-async function buildCanvasAttachmentReferenceIndex(app: App): Promise<Map<string, TFile[]>> {
+async function buildCanvasAttachmentReferenceIndex(app: App): Promise<{ index: Map<string, TFile[]>; complete: boolean }> {
 	const index = new Map<string, TFile[]>();
+	let complete = true;
 	const canvasFiles = app.vault.getFiles().filter((file) => file.extension === 'canvas');
 
 	await Promise.all(canvasFiles.map(async (canvasFile) => {
@@ -427,7 +484,7 @@ async function buildCanvasAttachmentReferenceIndex(app: App): Promise<Map<string
 				}
 			}
 		} catch {
-			// Ignore malformed canvas content to avoid blocking the command.
+			complete = false;
 		}
 	}));
 
@@ -437,7 +494,7 @@ async function buildCanvasAttachmentReferenceIndex(app: App): Promise<Map<string
 		index.set(targetPath, dedupedFiles);
 	}
 
-	return index;
+	return { index, complete };
 }
 
 function parseOriginalReference(originalText: string): ParsedOriginalReference {
@@ -496,6 +553,7 @@ function buildReplacementOperations(
 	resolvedLinks: Map<string, ResolvedEagleLink>,
 ): ReplacementOperation[] {
 	return plan.targets
+		.filter((target) => resolvedLinks.has(target.sourceFile.path))
 		.flatMap((target) => target.occurrences.map((occurrence) => {
 			const resolvedLink = resolvedLinks.get(target.sourceFile.path);
 			if (!resolvedLink) {
@@ -634,7 +692,7 @@ function buildDeletionReportText(activeFile: TFile, skips: DeletionSkipInfo[]): 
 		}
 
 		if (skip.deletionError) {
-			lines.push(`自动删除失败：${skip.deletionError}`);
+			lines.push(`保留原因：${skip.deletionError}`);
 		}
 
 		lines.push('');

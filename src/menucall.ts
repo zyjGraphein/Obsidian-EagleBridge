@@ -232,6 +232,11 @@ function resolveEagleUrlFromContextMenuEvent(plugin: MyPlugin, event: MouseEvent
         return { url: iframeTarget.src, targetPos: null };
     }
 
+    const mediaTarget = target.closest('.eagle-embed-container video, .eagle-embed-container audio') as HTMLMediaElement | null;
+    if (mediaTarget?.src && isEagleInfoUrl(mediaTarget.src)) {
+        return { url: mediaTarget.src, targetPos: null };
+    }
+
     const anchorTarget = target.closest('a.external-link') as HTMLAnchorElement | null;
     if (anchorTarget?.href && isEagleInfoUrl(anchorTarget.href)) {
         return { url: anchorTarget.href, targetPos: null };

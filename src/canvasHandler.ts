@@ -8,6 +8,7 @@ import {
     resolveUrlToEagleLink,
     shouldConvertTransferFilesToEagleLinks,
     shouldUploadExternalUrl,
+    showTransferError,
 } from './urlHandler';
 
 const DEFAULT_LINK_WIDTH = 420;
@@ -51,11 +52,11 @@ function consumeHandledEvent(event: Event): void {
 
 export function registerCanvasDocument(plugin: MyPlugin, doc: Document) {
     plugin.registerDomEvent(doc, 'paste', (event: ClipboardEvent) => {
-        void handleCanvasPaste(event, plugin);
+        void handleCanvasPaste(event, plugin).catch(showTransferError);
     }, { capture: true });
 
     plugin.registerDomEvent(doc, 'drop', (event: DragEvent) => {
-        void handleCanvasDrop(event, plugin);
+        void handleCanvasDrop(event, plugin).catch(showTransferError);
     }, { capture: true });
 
     plugin.registerDomEvent(doc, 'pointerup', (event: PointerEvent) => {
@@ -187,7 +188,7 @@ async function handleCanvasPaste(event: ClipboardEvent, plugin: MyPlugin): Promi
     }
 
     const clipboardData = event.clipboardData;
-    const clipboardFiles = getTransferFiles(clipboardData);
+    const clipboardFiles = getTransferFiles(clipboardData, plugin);
     const shouldHandleFiles = shouldConvertTransferFilesToEagleLinks(clipboardFiles, plugin, 'canvas');
     const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
     const shouldHandleUrl = Boolean(
@@ -266,7 +267,7 @@ async function handleCanvasDrop(event: DragEvent, plugin: MyPlugin): Promise<voi
         return;
     }
 
-    const transferFiles = Array.from(event.dataTransfer?.files ?? []);
+    const transferFiles = getTransferFiles(event.dataTransfer, plugin);
     if (transferFiles.length > 0) {
         if (!shouldConvertTransferFilesToEagleLinks(transferFiles, plugin, 'canvas')) {
             return;

@@ -1,4 +1,19 @@
 import * as path from 'path';
+import * as fs from 'fs';
+
+export function isSameFileSystemPath(left: string, right: string): boolean {
+    if (toComparablePath(left) === toComparablePath(right)) {
+        return true;
+    }
+    try {
+        const leftStat = fs.statSync(left, { bigint: true });
+        const rightStat = fs.statSync(right, { bigint: true });
+        // Directory identity also handles aliases, macOS casing and Unicode variants.
+        return leftStat.ino !== BigInt(0) && leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+    } catch {
+        return false;
+    }
+}
 
 function toComparablePath(targetPath: string): string {
     const resolvedPath = path.resolve(targetPath);
@@ -18,24 +33,21 @@ export function isPathInsideDirectory(targetPath: string, directoryPath: string)
 }
 
 export function getEagleLibraryItemPath(targetPath: string, libraryPath: string): string | null {
-    const resolvedLibraryImagesPath = path.join(path.resolve(libraryPath), 'images');
-    const resolvedTargetPath = path.resolve(targetPath);
-
-    if (!isPathInsideDirectory(resolvedTargetPath, resolvedLibraryImagesPath)) {
+    const item = getEagleItemPathLocation(targetPath);
+    if (!item || !isSameFileSystemPath(item.libraryPath, libraryPath)) {
         return null;
     }
+    return path.posix.join('images', item.infoDirectoryName);
+}
 
-    const relativePath = path.relative(resolvedLibraryImagesPath, resolvedTargetPath);
-    const pathSegments = relativePath.split(path.sep).filter(Boolean);
-
-    if (pathSegments.length < 2) {
-        return null;
+export function getEagleItemPathLocation(targetPath: string): { libraryPath: string; infoDirectoryName: string } | null {
+    let directory = path.dirname(path.resolve(targetPath));
+    while (directory !== path.dirname(directory)) {
+        const parent = path.dirname(directory);
+        if (/^[^/\\]+\.info$/i.test(path.basename(directory)) && path.basename(parent).toLowerCase() === 'images') {
+            return { libraryPath: path.dirname(parent), infoDirectoryName: path.basename(directory) };
+        }
+        directory = parent;
     }
-
-    const infoDirectoryName = pathSegments[0];
-    if (!/\.info$/i.test(infoDirectoryName)) {
-        return null;
-    }
-
-    return path.posix.join('images', infoDirectoryName);
+    return null;
 }

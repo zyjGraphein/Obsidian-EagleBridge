@@ -17,6 +17,7 @@ import {
 import { getCurrentPageTags } from './synchronizedpagetabs';
 import { chooseUploadTargetProfile, type UploadTargetMenuAnchor } from './uploadTargetModal';
 import { uploadFileToLibrary, uploadUrlToLibrary } from './eagleApi';
+import { getEagleItemPathLocation } from './eaglePaths';
 
 const electron = require('electron');
 const IMAGE_EXTENSIONS = new Set([
@@ -406,6 +407,24 @@ function toErrorMessage(error: unknown): string {
 	return String(error);
 }
 
+export function showTransferError(error: unknown): void {
+	const message = toErrorMessage(error);
+	if (message === 'UPLOAD_TARGET_CANCELLED') {
+		return;
+	}
+	print('Eagle transfer failed:', error);
+	const messages: Record<string, string> = {
+		NO_UPLOAD_TARGET: 'No available Eagle library profile for upload.',
+		NON_EAGLE_FILE: 'Non-Eagle link',
+		EAGLE_SOURCE_LIBRARY_NOT_CONFIGURED: 'Add the source Eagle library to EagleBridge settings, then drag the file again.',
+		UPLOADED_ITEM_ID_MISSING: 'Eagle returned no item ID. Use Eagle 4 or later. If the file was imported, drag it from Eagle to insert its link.',
+		UPLOADED_ITEM_NOT_FOUND: 'Eagle imported the bookmark but its link is not ready. Drag the imported item from Eagle to insert it.',
+		UPLOADED_ITEM_AMBIGUOUS: 'Multiple Eagle bookmarks match this import. Drag the intended item from Eagle to insert its link.',
+		EAGLE_LIBRARY_SWITCH_TIMEOUT: 'Could not confirm the target Eagle library. Open it in Eagle and try again.',
+	};
+	new Notice(messages[message] ?? 'Eagle transfer failed. Check that Eagle is running and the library is accessible.', 10000);
+}
+
 async function selectUploadTargetProfile(
 	pluginInstance: MyPlugin,
 	options: UploadTargetSelectionOptions = {},
@@ -555,22 +574,26 @@ export async function resolveFilePathToEagleLink(
 	filePath: string,
 	pluginInstance: MyPlugin,
 	preferredUploadTarget?: ResolvedEagleLibraryProfile | null,
+	uploadTags?: string[],
 ): Promise<ResolvedEagleLink> {
 	const existingProfile = findLibraryProfileByFilePath(pluginInstance.settings, filePath);
 	if (existingProfile?.resolvedPath) {
 		return buildLibraryLink(filePath, existingProfile);
+	}
+	if (getEagleItemPathLocation(filePath)) {
+		throw new Error('EAGLE_SOURCE_LIBRARY_NOT_CONFIGURED');
 	}
 
 	const targetProfile = preferredUploadTarget ?? await selectUploadTargetProfile(pluginInstance);
 	if (targetProfile === 'obsidian-default') {
 		throw new Error('OBSIDIAN_DEFAULT_EMBED');
 	}
-	const tags = getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
+	const tags = uploadTags ?? getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
 	const uploadedItem = await uploadFileToLibrary(filePath, targetProfile, tags);
 	return createUploadedLink(
 		targetProfile,
 		uploadedItem.itemId,
-		uploadedItem.sourceFileName || uploadedItem.expectedFileName || path.basename(filePath),
+		uploadedItem.fileName,
 	);
 }
 
@@ -588,7 +611,7 @@ export async function resolveUrlToEagleLink(
 	return createUploadedLink(
 		targetProfile,
 		uploadedItem.itemId,
-		uploadedItem.sourceFileName || uploadedItem.expectedFileName || url,
+		uploadedItem.fileName,
 	);
 }
 
@@ -623,9 +646,21 @@ export async function resolveTransferFilesToEagleLinks(
 		throw new Error('OBSIDIAN_DEFAULT_EMBED');
 	}
 	const resolvedLinks: ResolvedEagleLink[] = [];
+	const errors: unknown[] = [];
 
 	for (const filePath of dedupedFilePaths) {
-		resolvedLinks.push(await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget));
+		try {
+			resolvedLinks.push(await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget));
+		} catch (error) {
+			errors.push(error);
+		}
+	}
+	if (errors.length > 0) {
+		if (resolvedLinks.length === 0) {
+			throw errors[0];
+		}
+		showTransferError(errors[0]);
+		new Notice(`${resolvedLinks.length} file(s) linked; ${errors.length} file(s) could not be linked.`);
 	}
 
 	return resolvedLinks;
@@ -783,28 +818,9 @@ export async function handlePasteEvent(
 			new Notice('Obsidian 默认嵌入已插入');
 			return;
 		}
-		const clipboardText = clipboardData?.getData('text/plain')?.trim() || '';
-		if (clipboardText && isHttpUrl(clipboardText) && !clipboardText.startsWith('http://localhost')) {
-			new Notice('URL uploaded successfully, please wait for Eagle link update', 12000);
-			return;
-		}
 		new Notice('Eagle link converted');
 	} catch (error) {
-		const message = toErrorMessage(error);
-		if (message === 'UPLOAD_TARGET_CANCELLED') {
-			return;
-		}
-		if (message === 'NO_UPLOAD_TARGET') {
-			new Notice('No available Eagle library profile for upload.');
-			return;
-		}
-		if (message === 'NON_EAGLE_FILE') {
-			new Notice('Non-Eagle link');
-			return;
-		}
-
-		print(`File upload failed: ${message}`);
-		new Notice('File upload failed, check if Eagle is running');
+		showTransferError(error);
 	}
 }
 
@@ -848,20 +864,6 @@ export async function handleDropEvent(
 		}
 		new Notice('Eagle link converted');
 	} catch (error) {
-		const message = toErrorMessage(error);
-		if (message === 'UPLOAD_TARGET_CANCELLED') {
-			return;
-		}
-		if (message === 'NO_UPLOAD_TARGET') {
-			new Notice('No available Eagle library profile for upload.');
-			return;
-		}
-		if (message === 'NON_EAGLE_FILE') {
-			new Notice('Non-Eagle link');
-			return;
-		}
-
-		print(`File upload failed: ${message}`);
-		new Notice('File upload failed, check if Eagle is running');
+		showTransferError(error);
 	}
 }

@@ -1,7 +1,6 @@
 import { existsSync } from 'fs';
-import * as path from 'path';
 import type { EagleLibraryProfileSettings, MyPluginSettings } from './setting';
-import { isPathInsideDirectory } from './eaglePaths';
+import { getEagleLibraryItemPath } from './eaglePaths';
 
 export const MAX_LIBRARY_PROFILES = 5;
 export const DEFAULT_EXTERNAL_UPLOAD_MODE = 'fixed' as const;
@@ -206,7 +205,7 @@ export function findLibraryProfileByFilePath(
 			continue;
 		}
 
-		if (isPathInsideDirectory(filePath, profile.resolvedPath)) {
+		if (getEagleLibraryItemPath(filePath, profile.resolvedPath)) {
 			return profile;
 		}
 	}
@@ -258,15 +257,5 @@ export function extractEagleLinkTarget(rawUrl: string): EagleLinkTarget | null {
 }
 
 export function getLibraryItemPathForProfile(filePath: string, profile: ResolvedEagleLibraryProfile): string | null {
-	if (!profile.resolvedPath || !isPathInsideDirectory(filePath, path.join(profile.resolvedPath, 'images'))) {
-		return null;
-	}
-
-	const relativePath = path.relative(path.join(profile.resolvedPath, 'images'), path.resolve(filePath));
-	const pathSegments = relativePath.split(path.sep).filter(Boolean);
-	if (pathSegments.length < 2 || !/\.info$/i.test(pathSegments[0])) {
-		return null;
-	}
-
-	return path.posix.join('images', pathSegments[0]);
+	return profile.resolvedPath ? getEagleLibraryItemPath(filePath, profile.resolvedPath) : null;
 }

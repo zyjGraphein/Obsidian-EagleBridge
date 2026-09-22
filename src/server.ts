@@ -1,6 +1,8 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import { pipeline } from 'stream';
+import { Notice } from 'obsidian';
 import { print } from './main';
 import { isPathInsideDirectory } from './eaglePaths';
 import { readEagleShortcutUrl, resolveEagleItemById } from './eagleItemResolver';
@@ -149,7 +151,7 @@ function streamBinaryFile(
 			'Content-Length': end - start + 1,
 			'Content-Range': `bytes ${start}-${end}/${stats.size}`,
 		});
-		fs.createReadStream(filePath, { start, end }).pipe(res);
+		pipeFileResponse(req, res, filePath, { start, end });
 		return;
 	}
 
@@ -157,7 +159,25 @@ function streamBinaryFile(
 		'Content-Type': contentType,
 		'Content-Length': stats.size,
 	});
-	fs.createReadStream(filePath).pipe(res);
+	pipeFileResponse(req, res, filePath);
+}
+
+function pipeFileResponse(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	filePath: string,
+	range?: { start: number; end: number },
+): void {
+	if (req.method === 'HEAD') {
+		res.end();
+		return;
+	}
+	// Seeking or closing a large video must close its file descriptor as well.
+	pipeline(fs.createReadStream(filePath, range), res, (error) => {
+		if (error && (error as NodeJS.ErrnoException).code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+			print('Eagle file stream failed:', error);
+		}
+	});
 }
 
 function getCanvasImageTitle(imageUrl: string, libraryPath: string): string {
@@ -527,10 +547,20 @@ export async function refreshServers(profiles: ResolvedEagleLibraryProfile[]): P
 		}
 
 		const nextEntry = createServerEntry(profile);
-		nextEntry.server.listen(profile.servePort, () => {
+		try {
+			await new Promise<void>((resolve, reject) => {
+				nextEntry.server.once('error', reject);
+				nextEntry.server.listen(profile.servePort, () => {
+					nextEntry.server.off('error', reject);
+					resolve();
+				});
+			});
+			activeServers.set(profile.servePort, nextEntry);
 			print(`Server is running at http://localhost:${profile.servePort}/ for ${profile.alias}`);
-		});
-		activeServers.set(profile.servePort, nextEntry);
+		} catch (error) {
+			print('Eagle preview server failed:', error);
+			new Notice(`Eagle preview unavailable for ${profile.alias}: could not listen on port ${profile.servePort}. Check whether another Obsidian vault is using this port.`, 10000);
+		}
 	}
 }
 

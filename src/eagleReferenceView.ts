@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { App, ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from 'obsidian';
+import { App, ItemView, Menu, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
 import MyPlugin from './main';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 import { readEagleItemInfoById, resolveEagleItemById, type EagleLocalItemInfo } from './eagleItemResolver';
@@ -689,7 +689,7 @@ export class EagleReferenceView extends ItemView {
 		const toolbarEl = this.contentEl.createDiv({ cls: 'eagle-ref-toolbar' });
 		const titleGroupEl = toolbarEl.createDiv({ cls: 'eagle-ref-toolbar-group' });
 		titleGroupEl.createDiv({ cls: 'eagle-ref-title', text: 'Eagle References' });
-		this.statsEl = null;
+		this.statsEl = titleGroupEl.createDiv({ cls: 'eagle-ref-stats' });
 
 		const actionsEl = toolbarEl.createDiv({ cls: 'eagle-ref-toolbar-actions' });
 		const focusCurrentFileButton = actionsEl.createEl('button', {
@@ -713,10 +713,6 @@ export class EagleReferenceView extends ItemView {
 		});
 
 		const searchCardEl = this.contentEl.createDiv({ cls: 'eagle-ref-card eagle-ref-search-card' });
-		searchCardEl.createDiv({
-			cls: 'eagle-ref-search-hint',
-			text: 'Switch between current file browsing and library-wide search.',
-		});
 
 		const modeGroupEl = searchCardEl.createDiv({ cls: 'eagle-ref-scope-group' });
 		this.modeCurrentButtonEl = modeGroupEl.createEl('button', {
@@ -729,7 +725,7 @@ export class EagleReferenceView extends ItemView {
 
 		this.modeSearchButtonEl = modeGroupEl.createEl('button', {
 			cls: 'eagle-ref-scope-button',
-			text: 'Library search',
+			text: 'All references',
 		});
 		this.modeSearchButtonEl.addEventListener('click', () => {
 			void this.showMode('library-search');
@@ -743,7 +739,8 @@ export class EagleReferenceView extends ItemView {
 		this.searchInputEl = searchRowEl.createEl('input', {
 			cls: 'eagle-ref-search-input',
 			type: 'search',
-			placeholder: 'Search by name, ID, file, or path',
+			placeholder: 'Search attachments or notes…',
+			attr: { 'aria-label': 'Search Eagle references' },
 		});
 		this.searchInputEl.value = this.searchTerm;
 		this.searchInputEl.addEventListener('input', () => {
@@ -753,13 +750,14 @@ export class EagleReferenceView extends ItemView {
 			this.render();
 		});
 
-		const pickerCardEl = this.contentEl.createDiv({ cls: 'eagle-ref-card eagle-ref-picker-card' });
+		const browserEl = this.contentEl.createDiv({ cls: 'eagle-ref-browser' });
+		const pickerCardEl = browserEl.createDiv({ cls: 'eagle-ref-card eagle-ref-picker-card' });
 		const pickerHeaderEl = pickerCardEl.createDiv({ cls: 'eagle-ref-section-header' });
 		this.pickerTitleEl = pickerHeaderEl.createDiv({ cls: 'eagle-ref-section-title' });
 		this.pickerMetaEl = pickerHeaderEl.createDiv({ cls: 'eagle-ref-section-meta' });
 		this.pickerChipsEl = pickerCardEl.createDiv({ cls: 'eagle-ref-chip-list' });
 
-		this.detailsEl = this.contentEl.createDiv({ cls: 'eagle-ref-details' });
+		this.detailsEl = browserEl.createDiv({ cls: 'eagle-ref-details' });
 	}
 
 	private render(): void {
@@ -771,12 +769,14 @@ export class EagleReferenceView extends ItemView {
 	}
 
 	private updateStats(): void {
-		this.statsEl?.empty();
+		this.statsEl?.setText(this.loading ? 'Refreshing…' : `${this.snapshot.items.length} attachments indexed`);
 	}
 
 	private renderControls(): void {
 		this.modeCurrentButtonEl?.classList.toggle('is-active', this.viewMode === 'current-file');
 		this.modeSearchButtonEl?.classList.toggle('is-active', this.viewMode === 'library-search');
+		this.modeCurrentButtonEl?.setAttribute('aria-pressed', String(this.viewMode === 'current-file'));
+		this.modeSearchButtonEl?.setAttribute('aria-pressed', String(this.viewMode === 'library-search'));
 
 		this.currentPanelEl?.classList.toggle('is-hidden', this.viewMode !== 'current-file');
 		this.searchPanelEl?.classList.toggle('is-hidden', this.viewMode !== 'library-search');
@@ -785,8 +785,8 @@ export class EagleReferenceView extends ItemView {
 			const activeFile = this.getActiveFile();
 			this.currentMetaEl.setText(
 				activeFile
-					? `Browsing Eagle items referenced in ${activeFile.name}.`
-					: 'Open a Markdown or Canvas file to browse its Eagle items.',
+					? activeFile.path
+					: 'Open a note or Canvas to see its attachments.',
 			);
 		}
 
@@ -920,14 +920,14 @@ export class EagleReferenceView extends ItemView {
 		const pickerItems = this.getPickerItems();
 
 		if (this.viewMode === 'current-file') {
-			this.pickerTitleEl.setText('Current file items');
-			this.pickerMetaEl.setText(activeFile ? activeFile.name : 'No Markdown or Canvas file is open.');
+			this.pickerTitleEl.setText('Attachments');
+			this.pickerMetaEl.setText(String(pickerItems.length));
 		} else {
-			this.pickerTitleEl.setText('Library search');
+			this.pickerTitleEl.setText('Search results');
 			this.pickerMetaEl.setText(
 				this.searchTerm
-					? `${pickerItems.length} result${pickerItems.length === 1 ? '' : 's'} across all libraries`
-					: 'Enter a keyword to search across all indexed Eagle items.',
+					? String(pickerItems.length)
+					: '',
 			);
 		}
 
@@ -942,7 +942,7 @@ export class EagleReferenceView extends ItemView {
 		if (this.viewMode === 'library-search' && !this.searchTerm) {
 			this.pickerChipsEl.createDiv({
 				cls: 'eagle-ref-empty',
-				text: 'Enter a keyword to search across all Eagle items.',
+				text: 'Search by attachment name, ID or note path.',
 			});
 			return;
 		}
@@ -960,8 +960,15 @@ export class EagleReferenceView extends ItemView {
 		for (const item of pickerItems) {
 			const chipEl = this.pickerChipsEl.createEl('button', {
 				cls: `eagle-ref-chip ${this.selectedItemId === item.itemId ? 'is-selected' : ''}`,
-				text: item.displayName,
+				attr: { 'aria-pressed': String(this.selectedItemId === item.itemId) },
 			});
+			const icon = chipEl.createSpan({ cls: 'eagle-ref-item-icon' });
+			setIcon(icon, /mp4|webm|mov|m4v/i.test(item.ext) ? 'film' : /png|jpe?g|gif|webp|svg/i.test(item.ext) ? 'image' : 'paperclip');
+			const label = chipEl.createSpan({ cls: 'eagle-ref-item-text' });
+			label.createSpan({ cls: 'eagle-ref-item-name', text: item.displayName });
+			label.createSpan({ cls: 'eagle-ref-item-library', text: item.libraryAlias });
+			const count = chipEl.createSpan({ cls: 'eagle-ref-pill', text: String(item.referenceCount) });
+			setTooltip(count, `Referenced by ${item.referenceCount} files`);
 			chipEl.setAttribute('title', `${item.libraryLabel}\n${item.itemId}`);
 			chipEl.addEventListener('click', () => {
 				this.selectedItemId = item.itemId;
@@ -979,11 +986,9 @@ export class EagleReferenceView extends ItemView {
 		this.detailsEl.empty();
 
 		const selectedItem = this.selectedItemId ? this.snapshot.itemsById.get(this.selectedItemId) ?? null : null;
+		this.detailsEl.toggleClass('is-hidden', !selectedItem);
+		this.detailsEl.parentElement?.toggleClass('has-selection', !!selectedItem);
 		if (!selectedItem) {
-			this.detailsEl.createDiv({
-				cls: 'eagle-ref-empty eagle-ref-details-empty',
-				text: 'Select an Eagle item above to view its details and references.',
-			});
 			return;
 		}
 
@@ -993,6 +998,9 @@ export class EagleReferenceView extends ItemView {
 		summaryTextEl.createEl('h3', {
 			text: this.itemDetails ? `${this.itemDetails.name}${this.itemDetails.ext}` : selectedItem.displayName,
 		});
+		summaryTextEl.createDiv({ cls: 'eagle-ref-section-meta', text: selectedItem.libraryAlias });
+		const itemId = summaryTextEl.createEl('code', { cls: 'eagle-ref-item-id', text: selectedItem.itemId });
+		setTooltip(itemId, 'Eagle item ID');
 
 		const summaryActionsEl = summaryHeaderEl.createDiv({ cls: 'eagle-ref-summary-actions' });
 		const openInEagleButton = summaryActionsEl.createEl('button', { cls: 'mod-cta', text: 'Open in Eagle' });
@@ -1006,24 +1014,22 @@ export class EagleReferenceView extends ItemView {
 			})();
 		});
 
-		const openInObsidianButton = summaryActionsEl.createEl('button', { text: 'Open in Obsidian' });
-		openInObsidianButton.addEventListener('click', () => {
-			void openItemInObsidian(this.plugin, selectedItem.itemId, selectedItem.port);
-		});
-
-		const openDefaultButton = summaryActionsEl.createEl('button', { text: 'Open default app' });
-		openDefaultButton.addEventListener('click', () => {
-			void this.openSelectedItemFile('default');
-		});
-
-		const openOtherButton = summaryActionsEl.createEl('button', { text: 'Open with other app' });
-		openOtherButton.addEventListener('click', () => {
-			void this.openSelectedItemFile('other');
-		});
-
-		const deleteButton = summaryActionsEl.createEl('button', { cls: 'mod-warning', text: 'Delete item' });
-		deleteButton.addEventListener('click', () => {
-			openDeleteEagleAttachmentModal({
+		const moreButton = summaryActionsEl.createEl('button', { cls: 'clickable-icon', type: 'button' });
+		setIcon(moreButton, 'ellipsis');
+		setTooltip(moreButton, 'More actions');
+		moreButton.addEventListener('click', event => {
+			const menu = new Menu();
+			menu.addItem(item => item.setTitle('Open in Obsidian').setIcon('panel-right').onClick(() => {
+				void openItemInObsidian(this.plugin, selectedItem.itemId, selectedItem.port);
+			}));
+			menu.addItem(item => item.setTitle('Open in default app').setIcon('external-link').onClick(() => {
+				void this.openSelectedItemFile('default');
+			}));
+			menu.addItem(item => item.setTitle('Open with other app').setIcon('folder-open').onClick(() => {
+				void this.openSelectedItemFile('other');
+			}));
+			menu.addSeparator();
+			menu.addItem(item => item.setTitle('Delete item…').setIcon('trash-2').onClick(() => openDeleteEagleAttachmentModal({
 				plugin: this.plugin,
 				item: selectedItem,
 				itemUrl: buildItemInfoUrl(selectedItem.itemId, selectedItem.port),
@@ -1034,7 +1040,8 @@ export class EagleReferenceView extends ItemView {
 					this.plugin.eagleReferenceIndex.requestRefresh(50);
 					await this.refreshIndex();
 				},
-			});
+			})));
+			menu.showAtMouseEvent(event);
 		});
 
 		const detailBodyEl = summaryCardEl.createDiv({ cls: 'eagle-ref-detail-body' });
@@ -1044,13 +1051,6 @@ export class EagleReferenceView extends ItemView {
 			detailBodyEl.createDiv({ cls: 'eagle-ref-empty', text: this.detailsError });
 		} else {
 			const detailGridEl = detailBodyEl.createDiv({ cls: 'eagle-ref-detail-grid' });
-			this.renderReadOnlyField(
-				detailGridEl,
-				'Name',
-				this.itemDetails ? `${this.itemDetails.name}${this.itemDetails.ext}` : selectedItem.displayName,
-			);
-			this.renderReadOnlyField(detailGridEl, 'Item ID', selectedItem.itemId);
-			this.renderReadOnlyField(detailGridEl, 'Library', selectedItem.libraryLabel);
 			this.renderEditableField(detailGridEl, 'Annotation', 'textarea', this.itemDraft?.annotation ?? '', (value) => {
 				if (this.itemDraft) {
 					this.itemDraft.annotation = value;
@@ -1099,7 +1099,7 @@ export class EagleReferenceView extends ItemView {
 		fileListHeaderEl.createDiv({ cls: 'eagle-ref-section-title', text: 'References' });
 		fileListHeaderEl.createDiv({
 			cls: 'eagle-ref-section-meta',
-			text: `Referenced by ${selectedItem.referenceCount} file${selectedItem.referenceCount === 1 ? '' : 's'}, ${selectedItem.mentionCount} mention${selectedItem.mentionCount === 1 ? '' : 's'}.`,
+			text: `${selectedItem.referenceCount} files · ${selectedItem.mentionCount} links`,
 		});
 		const fileListEl = fileListCardEl.createDiv({ cls: 'eagle-ref-file-list' });
 		const activeFilePath = this.getActiveFile()?.path ?? '';
@@ -1117,8 +1117,9 @@ export class EagleReferenceView extends ItemView {
 		});
 
 		for (const reference of references) {
-			const fileRowEl = fileListEl.createDiv({
+			const fileRowEl = fileListEl.createEl('button', {
 				cls: `eagle-ref-file-row ${reference.filePath === activeFilePath ? 'is-active' : ''}`,
+				type: 'button',
 			});
 			fileRowEl.addEventListener('click', () => {
 				void this.openReferenceFile(reference.file);
@@ -1126,7 +1127,9 @@ export class EagleReferenceView extends ItemView {
 
 			const fileTextEl = fileRowEl.createDiv({ cls: 'eagle-ref-file-text' });
 			fileTextEl.createDiv({ cls: 'eagle-ref-file-name', text: reference.fileName });
-			fileTextEl.createDiv({ cls: 'eagle-ref-file-path', text: reference.filePath });
+			if (reference.filePath !== reference.fileName) {
+				fileTextEl.createDiv({ cls: 'eagle-ref-file-path', text: reference.filePath });
+			}
 
 			const fileMetaEl = fileRowEl.createDiv({ cls: 'eagle-ref-file-meta' });
 			fileMetaEl.createDiv({
@@ -1139,12 +1142,6 @@ export class EagleReferenceView extends ItemView {
 		}
 	}
 
-	private renderReadOnlyField(parentEl: HTMLElement, label: string, value: string): void {
-		const fieldEl = parentEl.createDiv({ cls: 'eagle-ref-field is-readonly' });
-		fieldEl.createDiv({ cls: 'eagle-ref-field-label', text: label });
-		fieldEl.createDiv({ cls: 'eagle-ref-field-value', text: value || '—' });
-	}
-
 	private renderEditableField(
 		parentEl: HTMLElement,
 		label: string,
@@ -1153,11 +1150,8 @@ export class EagleReferenceView extends ItemView {
 		onChange: (nextValue: string) => void,
 		description = '',
 	): void {
-		const fieldEl = parentEl.createDiv({ cls: `eagle-ref-field ${type === 'textarea' ? 'is-wide' : ''}` });
+		const fieldEl = parentEl.createEl('label', { cls: `eagle-ref-field ${type === 'textarea' ? 'is-wide' : ''}` });
 		fieldEl.createDiv({ cls: 'eagle-ref-field-label', text: label });
-		if (description) {
-			fieldEl.createDiv({ cls: 'eagle-ref-field-desc', text: description });
-		}
 
 		if (type === 'textarea') {
 			const textareaEl = fieldEl.createEl('textarea', { cls: 'eagle-ref-input eagle-ref-textarea' });
@@ -1169,6 +1163,7 @@ export class EagleReferenceView extends ItemView {
 		}
 
 		const inputEl = fieldEl.createEl('input', { cls: 'eagle-ref-input', type: 'text' });
+		inputEl.placeholder = description;
 		inputEl.value = value;
 		inputEl.addEventListener('input', () => {
 			onChange(inputEl.value);

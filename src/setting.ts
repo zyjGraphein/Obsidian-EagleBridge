@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, setIcon, setTooltip } from 'obsidian';
 import MyPlugin from './main';
 import { createEmptyLibraryProfile, getResolvedLibraryProfiles, MAX_LIBRARY_PROFILES } from './libraryProfiles';
 
@@ -171,7 +171,16 @@ export class SampleSettingTab extends PluginSettingTab {
 			void (async () => {
 				await this.plugin.refreshLibraryProfilesAndServers();
 				if (repaint) {
+					const active = this.containerEl.ownerDocument.activeElement as HTMLInputElement | null;
+					const inputs = Array.from(this.containerEl.querySelectorAll('input'));
+					const index = active ? inputs.indexOf(active) : -1;
+					const selection = index >= 0 ? [active!.selectionStart, active!.selectionEnd] : null;
 					this.display();
+					if (selection) {
+						const input = this.containerEl.querySelectorAll('input')[index];
+						input?.focus({ preventScroll: true });
+						input?.setSelectionRange(selection[0], selection[1]);
+					}
 				}
 			})();
 		}, 250);
@@ -191,6 +200,7 @@ export class SampleSettingTab extends PluginSettingTab {
 		containerEl.addClass('eagle-settings-root');
 
 		const shellEl = containerEl.createDiv({ cls: 'eagle-settings-shell' });
+		shellEl.createEl('h2', { text: 'EagleBridge', cls: 'eagle-settings-title' });
 
 		const navEl = shellEl.createEl('nav', {
 			cls: 'eagle-settings-nav',
@@ -201,11 +211,11 @@ export class SampleSettingTab extends PluginSettingTab {
 		});
 		this.createPageButton(navEl, 'libraries', 'Libraries');
 		this.createPageButton(navEl, 'upload', 'Upload');
-		this.createPageButton(navEl, 'viewer', 'Viewer');
+		this.createPageButton(navEl, 'viewer', 'Preview');
 		this.createPageButton(navEl, 'sync', 'Sync');
 		this.createPageButton(navEl, 'advanced', 'Advanced');
 
-		return shellEl.createDiv({ cls: 'eagle-settings-content' });
+		return shellEl.createDiv({ cls: 'eagle-settings-content', attr: { role: 'tabpanel' } });
 	}
 
 	private createPageButton(parentEl: HTMLElement, page: SettingsPageKey, title: string): void {
@@ -224,6 +234,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			}
 			this.activePage = page;
 			this.display();
+			this.containerEl.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus();
 		});
 	}
 
@@ -301,8 +312,8 @@ export class SampleSettingTab extends PluginSettingTab {
 
 	private renderLibraryRoutingSettings(parentEl: HTMLElement, resolvedProfiles: ReturnType<typeof getResolvedLibraryProfiles>): void {
 		new Setting(parentEl)
-			.setName('Mode')
-			.setDesc('Choose a fixed library or pick one each time for files outside all configured libraries.')
+			.setName('Destination')
+			.setDesc('For files dragged or pasted from outside Eagle.')
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption('fixed', 'Fixed target')
@@ -318,7 +329,6 @@ export class SampleSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.externalUploadMode === 'fixed') {
 			new Setting(parentEl)
 				.setName('Default library')
-				.setDesc('External files upload here automatically.')
 				.addDropdown((dropdown) => {
 					for (const profile of resolvedProfiles) {
 						dropdown.addOption(profile.id, `${profile.alias} (${profile.servePort})`);
@@ -344,13 +354,13 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		if (resolvedProfiles.length === 0) {
 			const emptyEl = parentEl.createDiv({ cls: 'eagle-settings-empty-state' });
-			emptyEl.createEl('h4', { text: 'No library profile yet' });
+			emptyEl.createEl('h4', { text: 'No libraries yet' });
 			emptyEl.createEl('p', {
-				text: 'Create a profile for each real Eagle library. Different machine paths to the same library should stay in the same profile.',
+				text: 'Add an Eagle library to start linking attachments.',
 			});
 			const addButton = emptyEl.createEl('button', {
 				cls: 'mod-cta',
-				text: 'Add first profile',
+				text: 'Add library',
 				type: 'button',
 			});
 			addButton.addEventListener('click', () => {
@@ -368,6 +378,7 @@ export class SampleSettingTab extends PluginSettingTab {
 				type: 'button',
 			});
 			buttonEl.createSpan({ cls: 'eagle-settings-profile-button-title', text: profile.alias });
+			buttonEl.setAttribute('aria-pressed', String(isActive));
 			buttonEl.createSpan({
 				cls: 'eagle-settings-profile-pill',
 				text: `Port ${profile.servePort}`,
@@ -393,29 +404,25 @@ export class SampleSettingTab extends PluginSettingTab {
 		const summaryCard = this.createCard(parentEl, '', '', 'eagle-settings-profile-summary');
 		const summaryHeader = summaryCard.createDiv({ cls: 'eagle-settings-profile-summary-header' });
 		const summaryCopy = summaryHeader.createDiv({ cls: 'eagle-settings-profile-summary-copy' });
-		summaryCopy.createEl('h3', { text: profile.alias });
-		summaryCopy.createEl('p', {
-			text: 'One profile represents one Eagle library.',
-		});
+		const status = summaryCopy.createDiv({ cls: 'eagle-settings-library-status' });
+		setIcon(status.createSpan(), profile.resolvedPath ? 'folder-check' : 'folder-x');
+		status.createSpan({ text: profile.resolvedPath ? 'Available on this device' : 'Library path not found' });
+		status.toggleClass('is-missing', !profile.resolvedPath);
+		if (profile.resolvedPath) setTooltip(status, profile.resolvedPath);
 		const summaryActions = summaryHeader.createDiv({ cls: 'eagle-settings-profile-summary-actions' });
 		const deleteButton = summaryActions.createEl('button', {
-			cls: 'mod-warning',
-			text: 'Delete profile',
+			cls: 'clickable-icon',
 			type: 'button',
 		});
+		setIcon(deleteButton, 'trash-2');
+		setTooltip(deleteButton, 'Remove library configuration');
 		deleteButton.addEventListener('click', () => {
 			void this.removeProfile(profile.id);
 		});
 
-		const metaGrid = summaryCard.createDiv({ cls: 'eagle-settings-profile-meta-grid' });
-		this.createMetaItem(metaGrid, 'Port', String(profile.servePort));
-		this.createMetaItem(metaGrid, 'Folder ID', profile.folderId || 'Not set');
-		this.createMetaItem(metaGrid, 'Current valid path', profile.resolvedPath || 'None on this device');
-
-		const basicCard = this.createCard(parentEl, 'Profile details', 'Core settings for this library.');
+		const basicCard = this.createCard(parentEl, 'Library details');
 		new Setting(basicCard)
 			.setName('Alias')
-			.setDesc('Display name for this profile.')
 			.addText((text) => {
 				text.setPlaceholder('Enter alias')
 					.setValue(profile.alias)
@@ -427,7 +434,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(basicCard)
 			.setName('Port')
-			.setDesc('Local preview port for this library.')
+			.setDesc('Keep this port stable to preserve existing links.')
 			.addText((text) => {
 				text.setPlaceholder('Enter port number')
 					.setValue(String(profile.servePort))
@@ -441,8 +448,8 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(basicCard)
-			.setName('Folder ID')
-			.setDesc('Default Eagle folder for uploads to this profile.')
+			.setName('Upload folder ID')
+			.setDesc('Optional. Leave blank to use the library root.')
 			.addText((text) => {
 				text.setPlaceholder('Enter folder ID')
 					.setValue(profile.folderId || '')
@@ -454,12 +461,11 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		const pathsCard = this.createCard(
 			parentEl,
-			'Path aliases',
-			'Add one path per computer. Every path here must point to the same library.',
+			'Library paths',
+			'One path per device, all pointing to the same Eagle library.',
 		);
 		new Setting(pathsCard)
-			.setName('Library paths')
-			.setDesc('The first existing path on this device becomes the active path.')
+			.setName('Device paths')
 			.addButton((button) => {
 				button
 					.setButtonText('Add path')
@@ -474,12 +480,13 @@ export class SampleSettingTab extends PluginSettingTab {
 		if (profile.paths.length === 0) {
 			pathsCard.createDiv({
 				cls: 'eagle-settings-inline-empty',
-				text: 'No path alias yet. Add at least one path for this library.',
+				text: 'Add the path to your .library folder.',
 			});
 		}
 
 		profile.paths.forEach((libraryPath, pathIndex) => {
 			new Setting(pathsCard)
+				.setClass('eagle-settings-path')
 				.setName(`Path ${pathIndex + 1}`)
 				.addText((text) => {
 					text.setPlaceholder('Enter library path')
@@ -502,27 +509,14 @@ export class SampleSettingTab extends PluginSettingTab {
 		});
 	}
 
-	private createMetaItem(parentEl: HTMLElement, label: string, value: string): void {
-		const itemEl = parentEl.createDiv({ cls: 'eagle-settings-meta-item' });
-		itemEl.createDiv({ cls: 'eagle-settings-meta-label', text: label });
-		itemEl.createDiv({ cls: 'eagle-settings-meta-value', text: value });
-	}
-
 	private renderLibrariesPage(parentEl: HTMLElement): void {
 		const resolvedProfiles = getResolvedLibraryProfiles(this.plugin.settings);
-		const routingSection = this.createSection(
-			parentEl,
-			'Upload target',
-			'Choose where files outside all configured libraries should upload.',
-		);
-		this.renderLibraryRoutingSettings(routingSection, resolvedProfiles);
-
 		const profileSection = this.createSection(
 			parentEl,
-			'Library profiles',
-			'Create one profile per Eagle library.',
+			'Libraries',
+			'',
 			{
-				actionText: this.plugin.settings.libraryProfiles.length >= MAX_LIBRARY_PROFILES ? `Max ${MAX_LIBRARY_PROFILES}` : 'Add profile',
+				actionText: this.plugin.settings.libraryProfiles.length >= MAX_LIBRARY_PROFILES ? `Max ${MAX_LIBRARY_PROFILES}` : 'Add library',
 				onAction: () => {
 					void this.addProfile();
 				},
@@ -535,12 +529,12 @@ export class SampleSettingTab extends PluginSettingTab {
 		const sectionEl = this.createSection(
 			parentEl,
 			'Upload',
-			'Set the main switch, supported surfaces, and allowed content types.',
+			'',
 		);
-		const masterCard = this.createCard(sectionEl, 'Master switch', 'Main control for all external Eagle uploads.');
+		const masterCard = this.createCard(sectionEl, '');
 		new Setting(masterCard)
-			.setName('Attachment upload')
-			.setDesc('Enable Eagle upload for external drag and paste.')
+			.setName('Upload to Eagle')
+			.setDesc('Upload external files when dragging or pasting.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.enabled)
 					.onChange(async (value) => {
@@ -550,11 +544,13 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
+		const routingCard = this.createCard(sectionEl, 'Upload destination');
+		this.renderLibraryRoutingSettings(routingCard, getResolvedLibraryProfiles(this.plugin.settings));
+
 		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
-		const surfaceCard = this.createCard(gridEl, 'Obsidian surface', 'Choose which surfaces can trigger uploads.');
+		const surfaceCard = this.createCard(gridEl, 'Upload from');
 		new Setting(surfaceCard)
-			.setName('Markdown upload')
-			.setDesc('Handle paste and drag inside Markdown editors.')
+			.setName('Markdown')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.markdown)
 					.onChange(async (value) => {
@@ -563,8 +559,7 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 		new Setting(surfaceCard)
-			.setName('Canvas upload')
-			.setDesc('Handle paste and drag inside Canvas views.')
+			.setName('Canvas')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.canvas)
 					.onChange(async (value) => {
@@ -573,10 +568,9 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		const contentCard = this.createCard(gridEl, 'Content type', 'Choose which content types can upload.');
+		const contentCard = this.createCard(gridEl, 'File types');
 		new Setting(contentCard)
-			.setName('Image upload')
-			.setDesc('Upload image files.')
+			.setName('Images')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.image)
 					.onChange(async (value) => {
@@ -585,8 +579,7 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 		new Setting(contentCard)
-			.setName('Video upload')
-			.setDesc('Upload video files.')
+			.setName('Videos')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.video)
 					.onChange(async (value) => {
@@ -595,8 +588,7 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 		new Setting(contentCard)
-			.setName('Website upload')
-			.setDesc('Upload website URLs.')
+			.setName('Web links')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.website)
 					.onChange(async (value) => {
@@ -605,8 +597,8 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 		new Setting(contentCard)
-			.setName('Other upload')
-			.setDesc('Upload PDF and other files.')
+			.setName('Other files')
+			.setDesc('PDF, audio and other attachments.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.other)
 					.onChange(async (value) => {
@@ -620,14 +612,14 @@ export class SampleSettingTab extends PluginSettingTab {
 		const sectionEl = this.createSection(
 			parentEl,
 			'Display preferences',
-			'Fine-tune image sizing, click behavior, and how previews open in Obsidian.',
+			'',
 		);
 		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
 
-		const imageCard = this.createCard(gridEl, 'Image display', 'Default image size and click behavior.');
+		const imageCard = this.createCard(gridEl, 'Images');
 		new Setting(imageCard)
 			.setName('Image size')
-			.setDesc('Default size for image import.')
+			.setDesc('Width in pixels. Leave blank for original size.')
 			.addText((text) => {
 				text.setPlaceholder('Enter image size')
 					.setValue(this.plugin.settings.imageSize?.toString() || '')
@@ -648,19 +640,18 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 		new Setting(imageCard)
 			.setName('Adaptive display ratio')
-			.setDesc('When the image exceeds the window size, display it adaptively according to the current window.')
+			.setDesc('Maximum preview size relative to the window.')
 			.addSlider((slider) => {
 				slider.setLimits(0.1, 1, 0.05);
 				slider.setValue(this.plugin.settings.adaptiveRatio);
 				slider.onChange(async (value) => {
 					this.plugin.settings.adaptiveRatio = value;
-					new Notice(`Adaptive ratio: ${value}`);
 					await this.plugin.saveSettings();
 				});
 				slider.setDynamicTooltip();
 			});
 
-		const openCard = this.createCard(gridEl, 'Open behavior', 'Choose where an Eagle attachment should open inside Obsidian.');
+		const openCard = this.createCard(gridEl, 'Open attachments');
 		new Setting(openCard)
 			.setName('Open in Obsidian')
 			.setDesc('The Web Viewer core plugin must be enabled to use popup or pane modes.')
@@ -680,19 +671,14 @@ export class SampleSettingTab extends PluginSettingTab {
 		const syncSection = this.createSection(
 			parentEl,
 			'Metadata sync',
-			'These settings stay grouped here so tag sync and page backlink sync are easier to reason about.',
+			'',
 		);
 
 		const attachmentTagSyncPanel = syncSection.createDiv({ cls: 'eagle-tag-sync-panel' });
 		attachmentTagSyncPanel.createEl('h3', { text: 'Attachment tag sync' });
-		attachmentTagSyncPanel.createEl('p', {
-			text: 'Choose a single direction for automatic tag updates when Eagle attachments enter the page.',
-			cls: 'eagle-tag-sync-panel-desc',
-		});
 
 		new Setting(attachmentTagSyncPanel)
 			.setName('Sync direction')
-			.setDesc('Use one mode at a time to avoid recursive tag changes across the page.')
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption('off', 'Off')
@@ -710,8 +696,8 @@ export class SampleSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.attachmentTagSyncMode === 'appendPageTagsToEagle') {
 			const appendModeCard = attachmentTagSyncPanel.createDiv({ cls: 'eagle-tag-sync-subcard' });
 			new Setting(appendModeCard)
-				.setName('Exact align tags')
-				.setDesc('Replace Eagle item tags with the current page tags instead of only appending missing tags.')
+				.setName('Replace Eagle tags')
+				.setDesc('Overwrite existing Eagle tags with the page tags.')
 				.addToggle((toggle) => {
 					toggle.setValue(this.plugin.settings.exactSyncPageTagsToEagle)
 						.onChange(async (value) => {
@@ -723,26 +709,12 @@ export class SampleSettingTab extends PluginSettingTab {
 				});
 		}
 
-		const attachmentTagSyncHint = attachmentTagSyncPanel.createDiv({ cls: 'eagle-tag-sync-hint' });
-		const activeModeText = this.plugin.settings.attachmentTagSyncMode === 'appendPageTagsToEagle'
-			? this.plugin.settings.exactSyncPageTagsToEagle
-				? 'Exact align mode: Eagle items in the page are overwritten to match the current page tags.'
-				: 'Append mode: when page tags or Eagle links change, Eagle items in the page only receive missing page tags.'
-			: this.plugin.settings.attachmentTagSyncMode === 'importEagleTagsToYaml'
-				? 'Import mode: when a new Eagle attachment is added to the page, its Eagle tags are merged into YAML tags.'
-				: 'Off mode: page tags and Eagle tags stay independent unless you run the manual append command.';
-		attachmentTagSyncHint.setText(activeModeText);
-
 		const obsidianLinkSyncPanel = syncSection.createDiv({ cls: 'eagle-obsidian-link-panel' });
 		obsidianLinkSyncPanel.createEl('h3', { text: 'Obsidian link sync' });
-		obsidianLinkSyncPanel.createEl('p', {
-			text: 'Send the current page advanced URI to Eagle. Automatic mode only runs when new Eagle attachments appear in a page that already has YAML id.',
-			cls: 'eagle-obsidian-link-panel-desc',
-		});
 
 		new Setting(obsidianLinkSyncPanel)
 			.setName('Auto send page link to Eagle')
-			.setDesc('When new Eagle items are added into the current Markdown page, automatically write the page advanced URI into their Obsidian metadata.')
+			.setDesc('Send a backlink for new attachments. Requires a YAML id on the page.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.autoSyncObsidianLinkToEagle)
 					.onChange(async (value) => {
@@ -772,17 +744,16 @@ export class SampleSettingTab extends PluginSettingTab {
 		const sectionEl = this.createSection(
 			parentEl,
 			'Maintenance',
-			'Refresh preview servers after path changes and enable debug logging only when needed.',
+			'',
 		);
-		const cardEl = this.createCard(sectionEl, 'Preview server tools', 'Active preview servers come from profiles with a valid local path.');
+		const cardEl = this.createCard(sectionEl, 'Local preview');
 		cardEl.createDiv({
 			cls: 'eagle-settings-inline-note',
-			text: `Active preview servers on this device: ${activeServerCount}`,
+			text: `Libraries available on this device: ${activeServerCount}`,
 		});
 
 		new Setting(cardEl)
 			.setName('Refresh servers')
-			.setDesc('Refresh all active local preview servers with the current profile settings.')
 			.addButton((button) => {
 				button
 					.setButtonText('Refresh now')
@@ -795,7 +766,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(cardEl)
 			.setName('Debug mode')
-			.setDesc('Enable or disable debug logging.')
+			.setDesc('Write diagnostic messages to the developer console.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.debug)
 					.onChange(async (value) => {

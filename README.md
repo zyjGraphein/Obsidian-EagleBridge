@@ -66,9 +66,19 @@ Visit the latest release page, download `main.js`, `manifest.json`, and `style.c
 
 
 ### Notes
+- File uploads require Eagle 4 or later. EagleBridge uses the item IDs returned by Eagle to insert links; it does not watch or scan the entire library for new files. iCloud and external-drive libraries still need to be accessible locally for previews.
+- If an Eagle file comes from a library that is not configured, add that library as a separate library profile before dragging it into Obsidian. EagleBridge will not re-import it into another library.
 - When using the plugin, Eagle must be running in the background, and the open state should correspond to the repository at the specified path.
 - If Eagle is not running or is not in the target path repository, you can still view images, but the context menu functions and attachment uploads to Eagle will not work.
 - When exporting notes as a PDF, images will display correctly, but other links (URLs, PDFs, MP4s) will still be clickable. However, when shared with others (outside the local environment), these links may not open.
+
+### Batch attachment migration
+
+Run **EagleBridge: Upload current Markdown attachments to Eagle** on the current note, or assign a hotkey in **Settings → Hotkeys**. This includes videos and other local attachments referenced in the Markdown body. Imports run sequentially using local file paths; video contents are not buffered in Obsidian's JavaScript memory.
+
+Successful references are replaced even if another import fails. Original attachments go to trash only after checking the Eagle copy and remaining references. YAML data is preserved; paths inside YAML and migration across multiple notes are not supported. Third-party card thumbnails depend on the card plugin.
+
+Embedded videos start paused in Live Preview and Reading view. Select the play control to start playback. Embeds with empty alt text also detect videos.
 
 ## Development Guide
 
