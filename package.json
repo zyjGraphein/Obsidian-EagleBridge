@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
+	"version": "0.3.5",
 	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
 	"main": "main.js",
 	"scripts": {
@@ -9,6 +9,7 @@
 		"test:resolver": "node scripts/test-eagle-item-resolver.mjs",
 		"test:transfer": "node scripts/test-eagle-transfer.mjs",
 		"test:batch": "node scripts/test-attachment-batch.mjs",
+		"test:servers": "node scripts/test-preview-servers.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],

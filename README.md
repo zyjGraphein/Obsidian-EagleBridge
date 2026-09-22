@@ -2,7 +2,7 @@
 
 【[中文](./doc/ReadmeZH.md) / EN】
 
-This is a sample plugin for Obsidian, designed to integrate Obsidian with the Eagle software.
+EagleBridge connects Obsidian notes and Canvas boards with media managed in Eagle.
 
 [eagle](https://eagle.cool) is a powerful attachment management software that allows for easy management of large quantities of images, videos, and audio materials, suitable for various scenarios such as collection, organization, and search. EagleBridge is intended for desktop vaults on Windows and macOS.
 
@@ -10,10 +10,15 @@ This is a sample plugin for Obsidian, designed to integrate Obsidian with the Ea
 
 This plugin includes the following functionalities:
 
-- Quick eagle attachment navigation in Obsidian
-- Tag synchronization
-- File viewing
-- Attachment management
+- Drag or paste Eagle media into Markdown notes and Canvas boards, with embedded previews.
+- Connect up to 5 Eagle libraries, configure device-specific paths, and choose upload destinations and file types.
+- Inspect attachment references across the current vault, edit metadata, and choose which links to remove.
+- Batch-migrate the current note's local attachments, including videos, to Eagle; export Markdown with Eagle attachments as a folder or ZIP.
+- Choose tag-sync direction and send note backlinks to Eagle with the companion Eagle plugin.
+- Integrate with obEcraft, with improved macOS paths, iCloud imports, video editing, and settings UI.
+- Share preview listeners across open Obsidian vaults using the same Eagle library and port, with automatic takeover after the serving window closes.
+
+See the [0.3.5 feature summary and video outline (Chinese)](./RELEASE_NOTES_0.3.5.md) for the full update and feature limits.
 
 [![GitHub stars](https://img.shields.io/github/stars/zyjGraphein/Obsidian-EagleBridge?style=flat&label=Stars)](https://github.com/zyjGraphein/Obsidian-EagleBridge/stargazers)
 [![Total Downloads](https://img.shields.io/github/downloads/zyjGraphein/Obsidian-EagleBridge/total?style=flat&label=Total%20Downloads)](https://github.com/zyjGraphein/Obsidian-EagleBridge/releases)
@@ -26,15 +31,17 @@ This plugin includes the following functionalities:
 
 ## Initial Setup Instructions
 
-1. **Configure the Listening Port**: Set a four-digit, complex value between 1000 and 9999 (e.g., 6060) to avoid conflicts with common port numbers. Once set, it is recommended not to change it to ensure stable attachment links.
+1. **Add an Eagle library** in EagleBridge settings. Give it an alias and a stable preview port (1000–65535, e.g. 6060). Different Eagle libraries need different ports. When several Obsidian vaults use the same library, configure the same port in each to share the preview service.
 
-2. **Set Eagle Library Location**: Select the library in the top left corner of Eagle and copy its library path. Examples:
+2. **Set the library path**, copied from Eagle's library selector. Examples:
    Windows: `D:\onedrive\eagle\Library.library`
    macOS: `/Users/you/Pictures/Eagle/Library.library`
 
-3. **Add Multiple Library Paths If Needed**: If the same vault is used across multiple devices, add each device's Eagle library path in settings. The plugin will automatically use the first existing path.
+3. **Configure other devices or libraries**: Add alternate device paths within the same library profile; the first accessible path is used. Add a separate profile for each different Eagle library, up to 5.
 
-You need to restart Obsidian after completing these configurations, and then you can start using the plugin.
+4. **Choose upload behavior**: Select a default Eagle library or ask on each upload. Markdown, Canvas, and file-type switches can be configured separately. Library changes refresh preview services automatically.
+
+Update and reload EagleBridge in all open Obsidian vaults to use shared previews. Keep established ports stable because saved links contain the port number.
 
 
 ## Showcase
@@ -56,7 +63,7 @@ Add `https://github.com/zyjGraphein/Obsidian-EagleBridge` to [BRAT](https://gith
 
 ### Manual Installation
 
-Visit the latest release page, download `main.js`, `manifest.json`, and `style.css`, then place them into `<your_vault>/.obsidian/plugins/EagleBridge/`.
+Visit the latest release page, download `main.js`, `manifest.json`, and `styles.css`, then place them into `<your_vault>/.obsidian/plugins/EagleBridge/`.
 
 
 ## Usage Guide
@@ -68,8 +75,7 @@ Visit the latest release page, download `main.js`, `manifest.json`, and `style.c
 ### Notes
 - File uploads require Eagle 4 or later. EagleBridge uses the item IDs returned by Eagle to insert links; it does not watch or scan the entire library for new files. iCloud and external-drive libraries still need to be accessible locally for previews.
 - If an Eagle file comes from a library that is not configured, add that library as a separate library profile before dragging it into Obsidian. EagleBridge will not re-import it into another library.
-- When using the plugin, Eagle must be running in the background, and the open state should correspond to the repository at the specified path.
-- If Eagle is not running or is not in the target path repository, you can still view images, but the context menu functions and attachment uploads to Eagle will not work.
+- Eagle must be running for uploads and operations that use its API; EagleBridge switches to the configured target library when required. Local previews and reference browsing can still work while Eagle is closed, provided the library files are accessible.
 - When exporting notes as a PDF, images will display correctly, but other links (URLs, PDFs, MP4s) will still be clickable. However, when shared with others (outside the local environment), these links may not open.
 
 ### Batch attachment migration
@@ -78,7 +84,7 @@ Run **EagleBridge: Upload current Markdown attachments to Eagle** on the current
 
 Successful references are replaced even if another import fails. Original attachments go to trash only after checking the Eagle copy and remaining references. YAML data is preserved; paths inside YAML and migration across multiple notes are not supported. Third-party card thumbnails depend on the card plugin.
 
-Embedded videos start paused in Live Preview and Reading view. Select the play control to start playback. Embeds with empty alt text also detect videos.
+Embedded videos start paused in Live Preview and Reading view. Select the play control to start playback. Embeds with empty alt text also detect videos. In Live Preview, use the code button at the top right to edit the embed link.
 
 ## Development Guide
 
@@ -94,11 +100,11 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 
 - [x] Support embedded previews for various file formats (e.g., PDF, MP4, PSD, OBJ, etc.)
 - [ ] Support updating position when dragging.
-- [ ] When exporting, replace all attachment links and export all attachments to a folder.
+- [x] Export a Markdown note with its resolvable Eagle attachments to a folder or ZIP.
 
 ## Known Limitations
 
-Currently, there is no effective method to prevent accidental deletion of attachments when traversing all file references. It is recommended to delete within Eagle and use ID retrieval to remove links in `.md` files.
+Reference and deletion checks cover the current Obsidian vault, not other open vaults or external applications. Shared preview services do not merge reference indexes. Batch migration is limited to the current Markdown body, and media playback depends on formats supported by Obsidian. Backlinks generated for Eagle require Advanced URI, a configured vault identifier, and a YAML `id` on the note. The companion Eagle inspector currently supports JPG and PNG.
 
 
 ## Issues and Suggestions

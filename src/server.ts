@@ -7,15 +7,7 @@ import { print } from './main';
 import { isPathInsideDirectory } from './eaglePaths';
 import { readEagleShortcutUrl, resolveEagleItemById } from './eagleItemResolver';
 import type { ResolvedEagleLibraryProfile } from './libraryProfiles';
-
-interface ActiveServerEntry {
-	profileId: string;
-	port: number;
-	libraryPath: string;
-	server: http.Server;
-}
-
-const activeServers = new Map<number, ActiveServerEntry>();
+import { PreviewServerManager } from './previewServerManager';
 
 function getContentType(ext: string): string | null {
 	switch (ext) {
@@ -479,93 +471,22 @@ async function handleServerRequest(
 	await respondWithFile(req, res, filePath, stats, 'public, max-age=604800');
 }
 
-function createServerEntry(profile: ResolvedEagleLibraryProfile): ActiveServerEntry {
-	const server = http.createServer((req, res) => {
-		res.setHeader('Access-Control-Allow-Origin', '*');
-		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-		res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-		res.setHeader('Access-Control-Allow-Credentials', 'true');
-		void handleServerRequest(req, res, profile.resolvedPath).catch((error) => {
-			print('Server request failed:', error);
-			if (!res.headersSent) {
-				res.writeHead(500, { 'Content-Type': 'text/plain' });
-			}
-			if (!res.writableEnded) {
-				res.end('Internal Server Error');
-			}
-		});
+const serverManager = new PreviewServerManager((profile, req, res) => {
+	res.setHeader('Access-Control-Allow-Origin', '*');
+	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+	res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
+	res.setHeader('Access-Control-Allow-Credentials', 'true');
+	void handleServerRequest(req, res, profile.resolvedPath).catch((error) => {
+		print('Server request failed:', error);
+		if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+		if (!res.writableEnded) res.end('Internal Server Error');
 	});
+}, message => { new Notice(message, 10000); }, error => print('Eagle preview server failed:', error));
 
-	return {
-		profileId: profile.id,
-		port: profile.servePort,
-		libraryPath: profile.resolvedPath,
-		server,
-	};
+export function refreshServers(profiles: ResolvedEagleLibraryProfile[]): Promise<void> {
+	return serverManager.refresh(profiles);
 }
 
-function closeServerEntry(entry: ActiveServerEntry): Promise<void> {
-	return new Promise((resolve) => {
-		entry.server.close(() => {
-			print(`Server stopped at http://localhost:${entry.port}/`);
-			resolve();
-		});
-	});
-}
-
-export async function refreshServers(profiles: ResolvedEagleLibraryProfile[]): Promise<void> {
-	const nextProfiles = profiles
-		.filter((profile) => profile.enabled && profile.resolvedPath)
-		.sort((left, right) => left.servePort - right.servePort);
-
-	const nextPorts = new Set(nextProfiles.map((profile) => profile.servePort));
-	const closeTasks: Promise<void>[] = [];
-	for (const [port, entry] of activeServers.entries()) {
-		if (!nextPorts.has(port)) {
-			activeServers.delete(port);
-			closeTasks.push(closeServerEntry(entry));
-		}
-	}
-
-	for (const profile of nextProfiles) {
-		const existingEntry = activeServers.get(profile.servePort);
-		if (existingEntry && existingEntry.profileId === profile.id && existingEntry.libraryPath === profile.resolvedPath) {
-			continue;
-		}
-
-		if (existingEntry) {
-			activeServers.delete(profile.servePort);
-			closeTasks.push(closeServerEntry(existingEntry));
-		}
-	}
-
-	await Promise.all(closeTasks);
-
-	for (const profile of nextProfiles) {
-		if (activeServers.has(profile.servePort)) {
-			continue;
-		}
-
-		const nextEntry = createServerEntry(profile);
-		try {
-			await new Promise<void>((resolve, reject) => {
-				nextEntry.server.once('error', reject);
-				nextEntry.server.listen(profile.servePort, () => {
-					nextEntry.server.off('error', reject);
-					resolve();
-				});
-			});
-			activeServers.set(profile.servePort, nextEntry);
-			print(`Server is running at http://localhost:${profile.servePort}/ for ${profile.alias}`);
-		} catch (error) {
-			print('Eagle preview server failed:', error);
-			new Notice(`Eagle preview unavailable for ${profile.alias}: could not listen on port ${profile.servePort}. Check whether another Obsidian vault is using this port.`, 10000);
-		}
-	}
-}
-
-export async function stopServers(): Promise<void> {
-	const closeTasks = Array.from(activeServers.values()).map((entry) => closeServerEntry(entry));
-	activeServers.clear();
-	await Promise.all(closeTasks);
+export function stopServers(): Promise<void> {
+	return serverManager.stop();
 }

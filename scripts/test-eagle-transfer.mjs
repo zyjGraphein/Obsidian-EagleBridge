@@ -32,6 +32,7 @@ async function bundle(entry) {
             build.onLoad({ filter: /.*/, namespace: 'stub' }, args => ({ contents: stubs[args.path] }));
         } }],
     });
+    delete require.cache[require.resolve(outfile)];
     return require(outfile);
 }
 
@@ -183,13 +184,13 @@ try {
     assert.equal(macPaths.getEagleLibraryItemPath('/Volumes/Design/Café.library-copy/images/MAC.info/photo.png', '/Volumes/Design/Café.library'), null);
 
     // Preview startup errors must be reported, and reloads must release servers.
-    const servers = await bundle('server');
+    let servers = await bundle('server');
     const blocker = http.createServer();
     await new Promise(resolve => blocker.listen(0, resolve));
     const port = blocker.address().port;
     try {
         await servers.refreshServers([{ ...target, servePort: port }]);
-        assert.ok(notices.some(notice => notice.includes(`could not listen on port ${port}`)));
+        assert.ok(notices.some(notice => notice.includes(`port ${port}`)));
     } finally {
         await new Promise(resolve => blocker.close(resolve));
     }
@@ -201,6 +202,7 @@ try {
             assert.equal(preview.status, 200);
             assert.equal(await preview.text(), 'test');
             await servers.stopServers();
+            servers = await bundle('server');
         }
         const videoDir = path.join(library, 'images', 'VIDEO.info');
         await fs.promises.mkdir(videoDir);

@@ -1,241 +1,235 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Eagle to Obsidian</title>
     <style>
         :root {
-            --panel-bg: rgba(20, 22, 26, 0.96);
-            --panel-border: rgba(255, 255, 255, 0.08);
-            --surface-bg: #2f3338;
-            --surface-hover: #3a4048;
-            --input-bg: rgba(16, 18, 22, 0.96);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --accent: #8b5cf6;
-            --danger: rgba(255, 255, 255, 0.16);
-            --shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+            color-scheme: normal;
+            --panel-bg: transparent;
+            --surface-bg: rgba(255, 255, 255, 0.055);
+            --surface-hover: rgba(255, 255, 255, 0.1);
+            --input-bg: rgba(0, 0, 0, 0.12);
+            --border: rgba(255, 255, 255, 0.13);
+            --text-primary: #eeeeF2;
+            --text-secondary: #a6a6b1;
+            --accent: #b4a0ec;
+            --accent-bg: #7655bd;
+            --focus-ring: rgba(180, 160, 236, 0.22);
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         html {
-            font-size: 11px;
-            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            border-radius: 14px;
-            overflow: hidden;
+            min-height: 100%;
+            background: transparent;
+            font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         body {
             margin: 0;
-            padding: 0;
             color: var(--text-primary);
-            background:
-                radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 34%),
-                linear-gradient(180deg, rgba(24, 26, 31, 0.98), rgba(14, 16, 20, 0.98));
-        }
-
-        button,
-        input {
-            font: inherit;
-        }
-
-        .plugin-shell {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 12px;
             background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            box-shadow: var(--shadow);
         }
+
+        button, input { font: inherit; }
+        button { cursor: pointer; -webkit-app-region: no-drag; }
+        button, input { -webkit-tap-highlight-color: transparent; }
+
+        .plugin-shell { padding: 10px 12px 12px; }
 
         .toolbar-row {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 8px;
-            flex-wrap: wrap;
+            min-height: 26px;
+            margin-bottom: 8px;
         }
 
-        .buttons-row {
+        .section-title {
             display: flex;
-            flex: 1;
-            gap: 6px;
             align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .url-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            margin: 2px;
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 7px 12px;
-            background: var(--surface-bg);
-            color: #ffffff;
-            font-size: 11px;
+            gap: 7px;
+            margin: 0;
+            font-size: 12px;
             font-weight: 600;
-            letter-spacing: 0.01em;
-            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
-            transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-            -webkit-app-region: no-drag;
         }
 
-        .url-btn:hover {
-            background: var(--surface-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
-            z-index: 1;
-        }
+        .section-title svg { width: 14px; height: 14px; color: var(--text-secondary); }
 
-        .add-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 10px;
-            border: none;
-            background: var(--accent);
-            color: #ffffff;
-            font-size: 17px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
-            transition: transform 0.18s ease, box-shadow 0.18s ease;
-        }
+        .buttons-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 
-        .add-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
-        }
-
-        .form-card {
-            display: none;
-            background: rgba(18, 20, 24, 0.9);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            padding: 12px;
-        }
-
-        .form-title {
-            margin-bottom: 12px;
-            text-align: center;
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .form-field {
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .inlineFormLabel {
+        .buttons-row:empty::before {
+            content: "No links yet";
             display: block;
-            margin-bottom: 6px;
-            font-size: 10px;
+            padding: 4px 0;
             color: var(--text-secondary);
         }
 
+        .url-btn {
+            display: block;
+            min-width: 0;
+            max-width: 100%;
+            height: 32px;
+            padding: 0 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface-bg);
+            color: var(--text-primary);
+            text-align: left;
+            transition: background-color 120ms ease, border-color 120ms ease;
+        }
+
+        .url-btn:hover { background: var(--surface-hover); border-color: var(--text-secondary); }
+        .url-btn:active { background: var(--input-bg); }
+
+        .add-btn {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            padding: 5px;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--text-secondary);
+        }
+
+        .add-btn svg { width: 16px; height: 16px; }
+        .add-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+        .form-card {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .form-title { margin: 0 0 12px; font-size: 12px; font-weight: 600; }
+        .form-field { margin-bottom: 12px; }
+        .inlineFormLabel { display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 11px; }
+
         .form-input {
-            width: 80%;
-            max-width: 220px;
-            padding: 7px 10px;
-            border-radius: 8px;
-            border: 1px solid var(--panel-border);
+            display: block;
+            width: 100%;
+            min-width: 0;
+            height: 32px;
+            padding: 6px 9px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
             background: var(--input-bg);
             color: var(--text-primary);
-            text-align: center;
+            outline: none;
         }
 
-        .form-input:focus,
-        .form-input:active,
-        .action-btn:focus,
-        .action-btn:active,
-        .add-btn:focus,
-        .add-btn:active {
-            outline: 2px solid var(--accent) !important;
-            outline-offset: 2px;
-        }
+        .form-input::placeholder { color: var(--text-secondary); opacity: 0.65; }
+        .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
+        button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-        .form-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-        }
-
+        .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 2px; }
         .action-btn {
-            border: none;
-            border-radius: 8px;
-            padding: 7px 14px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #ffffff;
-            transition: transform 0.18s ease, background 0.18s ease;
+            min-height: 30px;
+            padding: 5px 13px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--surface-bg);
+            color: var(--text-primary);
+            font-weight: 500;
         }
 
-        .action-btn:hover {
-            transform: translateY(-1px);
-        }
-
-        .confirm-btn {
-            background: var(--accent);
-        }
-
-        .cancel-btn {
-            background: var(--danger);
-        }
+        .cancel-btn:hover { background: var(--surface-hover); }
+        .confirm-btn { border-color: var(--accent-bg); background: var(--accent-bg); color: #fff; }
+        .confirm-btn:hover { filter: brightness(1.12); }
 
         .svg-icon-wrapper {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            width: 14px;
+            height: 16px;
+            margin-right: 7px;
+            vertical-align: -3px;
         }
 
-        .svg-icon-wrapper svg {
-            width: 15px !important;
-            height: 15px !important;
-            display: block;
-            fill: currentColor;
+        .svg-icon-wrapper svg { display: block; width: 14px; height: 16px; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+
+        :root[data-theme="LIGHT"], :root[data-theme="LIGHTGRAY"] {
+            --surface-bg: rgba(0, 0, 0, 0.025);
+            --surface-hover: rgba(0, 0, 0, 0.06);
+            --input-bg: rgba(255, 255, 255, 0.65);
+            --border: rgba(0, 0, 0, 0.12);
+            --text-primary: #303038;
+            --text-secondary: #6c6c76;
+            --accent: #7655bd;
+            --focus-ring: rgba(118, 85, 189, 0.14);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .url-btn { transition: none; }
         }
     </style>
 </head>
 
 <body>
-    <div class="plugin-shell">
+    <main class="plugin-shell">
         <div class="toolbar-row">
-            <div id="urlButtonsContainer" class="buttons-row"></div>
-            <button id="registerUrlBtn" class="add-btn">+</button>
+            <h1 class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2"/>
+                    <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/>
+                </svg>
+                Links
+            </h1>
+            <button id="registerUrlBtn" class="add-btn" type="button" aria-label="Add link" title="Add link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+            </button>
         </div>
+        <div id="urlButtonsContainer" class="buttons-row" role="group" aria-label="Linked destinations"></div>
 
-        <div id="urlInlineForm" class="form-card">
-            <div class="form-title" id="inlineFormTitle">Register Link</div>
+        <div id="urlInlineForm" class="form-card" role="group" aria-labelledby="inlineFormTitle">
+            <h2 class="form-title" id="inlineFormTitle">Register Link</h2>
             <div class="form-field">
-                <label class="inlineFormLabel">Name</label>
-                <input type="text" id="inlineUrlNameInput" class="form-input">
+                <label class="inlineFormLabel" for="inlineUrlNameInput">Name</label>
+                <input type="text" id="inlineUrlNameInput" class="form-input" placeholder="Link name" autocomplete="off">
             </div>
             <div class="form-field">
-                <label class="inlineFormLabel">URL Address</label>
-                <input type="text" id="inlineUrlAddressInput" class="form-input">
+                <label class="inlineFormLabel" for="inlineUrlAddressInput">URL address</label>
+                <input type="text" id="inlineUrlAddressInput" class="form-input" placeholder="obsidian://… or https://…" autocomplete="off" spellcheck="false">
             </div>
             <div class="form-actions">
-                <button id="inlineFormConfirmBtn" class="action-btn confirm-btn">Confirm</button>
-                <button id="inlineFormCancelBtn" class="action-btn cancel-btn">Cancel</button>
+                <button id="inlineFormCancelBtn" class="action-btn cancel-btn" type="button">Cancel</button>
+                <button id="inlineFormConfirmBtn" class="action-btn confirm-btn" type="button">Confirm</button>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+    let eagleTheme = 'AUTO';
+    function applyTheme(theme) {
+        eagleTheme = String(theme || 'AUTO').toUpperCase();
+        document.documentElement.dataset.theme = eagleTheme === 'AUTO'
+            ? (systemTheme.matches ? 'DARK' : 'LIGHT') : eagleTheme;
+    }
+    systemTheme.addEventListener('change', () => applyTheme(eagleTheme));
+    eagle.onThemeChanged(applyTheme);
+    applyTheme(eagle.app.theme);
+
     const fs = require('fs');
     const path = require('path');
     const OBSIDIAN_METADATA_KEY = 'Obsidian';
@@ -432,6 +426,7 @@
     };
 
     eagle.onPluginCreate(async () => {
+        applyTheme(await eagle.app.theme);
         const items = await eagle.item.getSelected();
         currentItem = items[0];
         metadataFilePath = currentItem?.metadataFilePath;
