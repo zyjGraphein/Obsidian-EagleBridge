@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo/OEbridge.svg" alt="EagleBridge logo" width="120" height="120">
+</p>
+
 # Obsidian EagleBridge
 
 【[中文](./doc/ReadmeZH.md) / EN】
@@ -104,7 +108,7 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 
 ## Known Limitations
 
-Reference and deletion checks cover the current Obsidian vault, not other open vaults or external applications. Shared preview services do not merge reference indexes. Batch migration is limited to the current Markdown body, and media playback depends on formats supported by Obsidian. Backlinks generated for Eagle require Advanced URI, a configured vault identifier, and a YAML `id` on the note. The companion Eagle inspector currently supports JPG and PNG.
+Reference and deletion checks cover the current Obsidian vault, not other open vaults or external applications. Shared preview services do not merge reference indexes. Batch migration is limited to the current Markdown body, and media playback depends on formats supported by Obsidian. Backlinks generated for Eagle require Advanced URI, a configured vault identifier, and a YAML `id` on the note. The companion Eagle inspector supports common images, videos (including MP4), audio, PDF, web bookmarks (URL), design files, fonts, 3D assets, documents and archives. Select its logo to add a link; existing links appear alongside it.
 
 
 ## Issues and Suggestions

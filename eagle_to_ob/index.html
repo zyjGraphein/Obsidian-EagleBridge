@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Eagle to Obsidian</title>
+    <title>Eagle-Obsidianbridge</title>
     <style>
         :root {
             color-scheme: normal;
@@ -39,29 +39,13 @@
         button { cursor: pointer; -webkit-app-region: no-drag; }
         button, input { -webkit-tap-highlight-color: transparent; }
 
-        .plugin-shell { padding: 10px 12px 12px; }
+        .plugin-shell { padding: 6px 10px; }
 
-        .toolbar-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            min-height: 26px;
-            margin-bottom: 8px;
-        }
+        .toolbar-row { display: flex; align-items: flex-start; gap: 6px; }
 
-        .section-title {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            margin: 0;
-            font-size: 12px;
-            font-weight: 600;
-        }
+        .brand-logo { display: block; width: 24px; height: 24px; flex-shrink: 0; object-fit: contain; }
 
-        .section-title svg { width: 14px; height: 14px; color: var(--text-secondary); }
-
-        .buttons-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+        .buttons-row { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; min-height: 32px; }
 
         .buttons-row:empty::before {
             content: "No links yet";
@@ -95,16 +79,15 @@
             flex: 0 0 auto;
             align-items: center;
             justify-content: center;
-            width: 26px;
-            height: 26px;
-            padding: 5px;
+            width: 32px;
+            height: 32px;
+            padding: 3px;
             border: 1px solid transparent;
             border-radius: 5px;
             background: transparent;
             color: var(--text-secondary);
         }
 
-        .add-btn svg { width: 16px; height: 16px; }
         .add-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
 
         .form-card {
@@ -186,20 +169,11 @@
 <body>
     <main class="plugin-shell">
         <div class="toolbar-row">
-            <h1 class="section-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2"/>
-                    <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/>
-                </svg>
-                Links
-            </h1>
             <button id="registerUrlBtn" class="add-btn" type="button" aria-label="Add link" title="Add link">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
+                <img class="brand-logo" src="logo.svg" alt="" aria-hidden="true" width="24" height="24" draggable="false">
             </button>
+            <div id="urlButtonsContainer" class="buttons-row" role="group" aria-label="Linked destinations"></div>
         </div>
-        <div id="urlButtonsContainer" class="buttons-row" role="group" aria-label="Linked destinations"></div>
 
         <div id="urlInlineForm" class="form-card" role="group" aria-labelledby="inlineFormTitle">
             <h2 class="form-title" id="inlineFormTitle">Register Link</h2>

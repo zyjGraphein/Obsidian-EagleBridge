@@ -3,15 +3,15 @@
     "version": "1.0.0",
     "platform": "all",
     "arch": "all",
-    "name": "ob",
+    "name": "Eagle-Obsidianbridge",
     "logo": "/logo.png",
     "keywords": [],
     "devTools": true,
     "preview": {
-        "jpg,png": {
+        "3dl,3dm,3ds,3fr,3g2,3gp,3mf,7z,aac,abc,abr,ac3,acb,aco,aep,aepx,aet,afdesign,afl,afphoto,afpub,ai,aif,aifc,aiff,aiffc,alac,amr,ani,ape,apk,apng,arw,ase,aseprite,asf,asl,ass,astc,atn,aup,aup3,avi,avif,azw,azw3,base,bat,bay,bib,bin,blend,bmp,braw,bw,bz2,c,c4d,cab,caf,canvas,cap,cbr,cbz,cdr,cdt,cfg,chm,cjs,clip,conf,cpp,cpt,cr2,cr3,crw,cs,css,csv,cube,cur,dae,dat,dcr,dds,deb,dib,divx,djv,djvu,dmg,dng,doc,docm,docx,dot,dotx,dpx,drp,dts,dwg,dxf,eip,enex,eot,eps,epsf,epub,erf,exe,exr,f4v,fb2,fbx,fff,fig,fla,flac,flv,gif,glb,gltf,go,gpl,grd,gz,h,hdr,heic,heif,hif,hpp,htm,html,iam,icns,ico,idml,iges,igs,iiq,img,indd,indt,ini,int,inta,ipt,ipynb,iso,j2k,jar,java,jfif,jp2,jpe,jpeg,jpf,jpg,jpm,jpx,js,json,jsonl,jsx,jxl,kdc,key,kra,kt,ktx,ktx2,less,license,lip,log,lrc,lua,lut,lwo,lws,lz,lzma,m1v,m2t,m2ts,m2v,m4a,m4b,m4p,m4v,ma,markdown,max,mb,md,mdx,mef,mht,mhtml,mid,midi,mj2,mjs,mka,mkv,mobi,mod,modo,mos,mov,mp3,mp4,mpeg,mpeg4,mpg,mpv,mrw,msi,mtl,mts,mxf,nef,nrw,numbers,obj,odp,ods,odt,oga,ogg,ogv,opml,opus,ora,orf,otc,otf,otp,ots,ott,oxps,pages,pak,pal,pam,pat,pbm,pcx,pdf,pef,pfb,pfm,pgm,php,pic,pkg,ply,png,pnm,pot,potx,ppm,pps,ppsx,ppt,pptm,pptx,procreate,prproj,ps,ps1,psb,psd,psp,pspimage,ptx,pvr,pxd,pxm,py,qoi,r,r3d,raf,rar,raw,rgb,rgba,ris,rm,rmvb,rpm,rtf,rw2,rwl,sai,sai2,sass,sbs,sbsar,scss,sct,sgi,sh,sketch,skp,sldasm,sldprt,spp,spsm,sql,sr2,srf,srt,srw,ssa,step,stl,stp,svelte,svg,svgz,swf,swift,tar,tbz2,tex,tga,tgz,tif,tiff,tod,toml,torrent,ts,tsv,tsx,ttc,ttf,txt,txz,uasset,unitypackage,url,usd,usda,usdc,usdz,vdb,vob,vox,vtt,vue,wasm,wav,wave,webarchive,webloc,webm,webp,website,wma,wmv,woff,woff2,x3f,xcf,xd,xls,xlsm,xlsx,xlt,xltx,xml,xps,xz,yaml,yml,zbr,zip,zpr,zst,ztl": {
             "inspector": {
                 "path": "index.html",
-                "height": 100,
+                "height": 44,
                 "multiSelect": false
             }
         }

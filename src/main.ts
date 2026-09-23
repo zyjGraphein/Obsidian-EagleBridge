@@ -1,5 +1,6 @@
 import { Menu,MenuItem,App, Editor, MarkdownView, MarkdownPostProcessorContext, MarkdownRenderChild, Modal, Notice, Plugin, Setting,TFile, Platform, FileStats } from 'obsidian';
 import { refreshServers, stopServers } from './server';
+import { EAGLEBRIDGE_ICON, registerEagleBridgeIcon } from './branding';
 import { canResolveMarkdownTransfer, handlePasteEvent, handleDropEvent, resolveMarkdownTransfer, shouldTrackMarkdownDragCursor, syncEditorCursorToDragEvent } from './urlHandler';
 import { onElement } from './onElement';
 import { exec, spawn, execSync } from 'child_process';
@@ -44,6 +45,7 @@ export default class MyPlugin extends Plugin {
 	private autoTagSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	async onload() {
+		this.register(registerEagleBridgeIcon());
 		console.log('加载 Eagle-Embed 插件');
 		
 		await this.loadSettings();
@@ -60,7 +62,7 @@ export default class MyPlugin extends Plugin {
 		this.register(() => {
 			this.app.workspace.getLeavesOfType(EAGLE_REFERENCE_VIEW_TYPE).forEach((leaf) => leaf.detach());
 		});
-		this.addRibbonIcon('network', 'Open Eagle reference view', () => {
+		this.addRibbonIcon(EAGLEBRIDGE_ICON, 'EagleBridge: Open reference view', () => {
 			void this.openEagleReferenceView({ viewMode: 'current-file' });
 		});
 		this.addCommand({

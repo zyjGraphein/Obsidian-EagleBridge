@@ -1,5 +1,6 @@
 import { Menu, MenuItem, MarkdownView, Notice, Modal, App, Setting, TFile } from 'obsidian';
 import MyPlugin from './main';
+import { EAGLEBRIDGE_ICON } from './branding';
 import * as path from 'path';
 import { onElement } from './onElement';
 import { print } from './main';
@@ -570,7 +571,7 @@ function appendOpenGroup(
 
 			submenu.addItem((item: MenuItem) =>
 				item
-					.setIcon('network')
+					.setIcon(EAGLEBRIDGE_ICON)
 					.setTitle('Reference view')
 					.onClick(() => {
 						void openItemInReferenceView(plugin, itemId);

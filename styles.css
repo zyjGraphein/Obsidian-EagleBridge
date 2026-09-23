@@ -18,6 +18,12 @@
 .eagle-embed-block:focus-within .eagle-embed-edit { opacity: 1; }
 .eagle-embed-edit:hover { color: var(--text-normal); }
 
+/* Brand */
+.eagle-brand-logo { display: block; width: 32px; height: 32px; flex-shrink: 0; object-fit: contain; }
+.eagle-settings-header,
+.eagle-ref-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.eagle-settings-header .eagle-brand-logo { width: 40px; height: 40px; }
+
 /* Settings */
 .eagle-settings-root { container: eagle-settings / inline-size; }
 .eagle-settings-shell {
@@ -29,6 +35,7 @@
     padding-bottom: 24px;
 }
 .eagle-settings-title { margin: 0; font-size: var(--font-ui-large); }
+.eagle-settings-version { margin-left: auto; color: var(--text-muted); font-size: var(--font-ui-small); white-space: nowrap; }
 .eagle-settings-nav {
     display: flex;
     gap: 4px;

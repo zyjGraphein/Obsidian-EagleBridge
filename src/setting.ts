@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting, Notice, setIcon, setTooltip } from 'obsidian';
 import MyPlugin from './main';
+import { appendEagleBridgeLogo } from './branding';
 import { createEmptyLibraryProfile, getResolvedLibraryProfiles, MAX_LIBRARY_PROFILES } from './libraryProfiles';
 
 export interface EagleUploadSettings {
@@ -200,7 +201,13 @@ export class SampleSettingTab extends PluginSettingTab {
 		containerEl.addClass('eagle-settings-root');
 
 		const shellEl = containerEl.createDiv({ cls: 'eagle-settings-shell' });
-		shellEl.createEl('h2', { text: 'EagleBridge', cls: 'eagle-settings-title' });
+		const headerEl = shellEl.createDiv({ cls: 'eagle-settings-header' });
+		appendEagleBridgeLogo(headerEl);
+		headerEl.createEl('h2', { text: 'EagleBridge', cls: 'eagle-settings-title' });
+		headerEl.createSpan({
+			text: `v${this.plugin.manifest.version}`,
+			cls: 'eagle-settings-version',
+		});
 
 		const navEl = shellEl.createEl('nav', {
 			cls: 'eagle-settings-nav',

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { App, ItemView, Menu, Notice, TFile, ViewStateResult, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
 import MyPlugin from './main';
+import { appendEagleBridgeLogo, EAGLEBRIDGE_ICON } from './branding';
 import { openDeleteEagleAttachmentModal } from './eagleDeletion';
 import { readEagleItemInfoById, resolveEagleItemById, type EagleLocalItemInfo } from './eagleItemResolver';
 import { switchEagleLibrary, updateItemInLibrary } from './eagleApi';
@@ -580,7 +581,7 @@ export class EagleReferenceView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'network';
+		return EAGLEBRIDGE_ICON;
 	}
 
 	async onOpen(): Promise<void> {
@@ -687,7 +688,9 @@ export class EagleReferenceView extends ItemView {
 		this.contentEl.addClass('eagle-ref-view');
 
 		const toolbarEl = this.contentEl.createDiv({ cls: 'eagle-ref-toolbar' });
-		const titleGroupEl = toolbarEl.createDiv({ cls: 'eagle-ref-toolbar-group' });
+		const brandEl = toolbarEl.createDiv({ cls: 'eagle-ref-brand' });
+		appendEagleBridgeLogo(brandEl);
+		const titleGroupEl = brandEl.createDiv({ cls: 'eagle-ref-toolbar-group' });
 		titleGroupEl.createDiv({ cls: 'eagle-ref-title', text: 'Eagle References' });
 		this.statsEl = titleGroupEl.createDiv({ cls: 'eagle-ref-stats' });
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../logo/OEbridge.svg" alt="EagleBridge 标志" width="120" height="120">
+</p>
+
 # Obsidian EagleBridge
 
 EagleBridge 将 Obsidian 笔记与 Canvas 白板连接到 Eagle 管理的素材。
@@ -95,7 +99,7 @@ EagleBridge 将 Obsidian 笔记与 Canvas 白板连接到 Eagle 管理的素材�
 
 ## 已知限制
 
-引用与删除检查只覆盖当前 Obsidian 库，不包含其他已打开的库或外部应用；共享预览服务不会合并引用索引。批量迁移限于当前 Markdown 正文，视频播放能力取决于 Obsidian 支持的格式。生成 Eagle 回跳链接需要 Advanced URI、已配置的库标识和笔记 YAML `id`；配套 Eagle 检查器目前支持 JPG、PNG。
+引用与删除检查只覆盖当前 Obsidian 库，不包含其他已打开的库或外部应用；共享预览服务不会合并引用索引。批量迁移限于当前 Markdown 正文，视频播放能力取决于 Obsidian 支持的格式。生成 Eagle 回跳链接需要 Advanced URI、已配置的库标识和笔记 YAML `id`；配套 Eagle 检查器支持常见图片、视频（含 MP4）、音频、PDF、网页书签（URL）、设计文件、字体、3D 素材、文档及压缩包等格式。点击 logo 添加链接，已有链接与 logo 同行显示。
 
 
 ## 问题或建议
