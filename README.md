@@ -19,6 +19,7 @@ This plugin includes the following functionalities:
 - Inspect attachment references across the current vault, edit metadata, and choose which links to remove.
 - Batch-migrate the current note's local attachments, including videos, to Eagle; export Markdown with Eagle attachments as a folder or ZIP.
 - Choose tag-sync direction and send note backlinks to Eagle with the companion Eagle plugin.
+- Copy embeds, Markdown links, plain URLs or item IDs from Eagle, using the active preview port for each library.
 - Integrate with obEcraft, with improved macOS paths, iCloud imports, video editing, and settings UI.
 - Share preview listeners across open Obsidian vaults using the same Eagle library and port, with automatic takeover after the serving window closes.
 
@@ -90,6 +91,14 @@ Successful references are replaced even if another import fails. Original attach
 
 Embedded videos start paused in Live Preview and Reading view. Select the play control to start playback. Embeds with empty alt text also detect videos. In Live Preview, use the code button at the top right to edit the embed link.
 
+### Copy links from Eagle
+
+Install or update the complete `eagle_to_ob` folder as an Eagle plugin, and reload EagleBridge in Obsidian. In Eagle's inspector, select the **logo** to open **Copy link**. Choose **Embed**, **Link**, **URL** or **Item ID** (plain `ID.info`, without Markdown or a URL); embed width defaults to 700 px and can be changed or left blank. Use the separate **+** button to add a backlink.
+
+Copying a URL or Markdown link requires Obsidian to be running with EagleBridge enabled and the selected item's library configured. The panel discovers that library's live preview service and checks it again before copying; it does not assume port 6060. If the same library has several preview addresses, select one. If unavailable, start/reload EagleBridge and select **Retry**. Existing clipboard contents are preserved on a failed service check. A plain item ID can be copied even when the preview service is offline. A working preview from an older plugin is not enough for discovery: update and reload EagleBridge in every open Obsidian vault, including the window currently serving that port.
+
+Discovery uses small local records under `~/.eaglebridge/preview-servers` in your user home folder, containing only ports and temporary service IDs, grouped by a hash of library identity. It does not upload data or scan network ports. These localhost links work on the local device while its preview service is running.
+
 ## Development Guide
 
 This plugin follows the structure of the [Obsidian Sample Plugin](https://github.com/obsidianmd/obsidian-sample-plugin). More details can be found there.
@@ -108,7 +117,7 @@ This plugin follows the structure of the [Obsidian Sample Plugin](https://github
 
 ## Known Limitations
 
-Reference and deletion checks cover the current Obsidian vault, not other open vaults or external applications. Shared preview services do not merge reference indexes. Batch migration is limited to the current Markdown body, and media playback depends on formats supported by Obsidian. Backlinks generated for Eagle require Advanced URI, a configured vault identifier, and a YAML `id` on the note. The companion Eagle inspector supports common images, videos (including MP4), audio, PDF, web bookmarks (URL), design files, fonts, 3D assets, documents and archives. Select its logo to add a link; existing links appear alongside it.
+Reference and deletion checks cover the current Obsidian vault, not other open vaults or external applications. Shared preview services do not merge reference indexes. Batch migration is limited to the current Markdown body, and media playback depends on formats supported by Obsidian. Backlinks generated for Eagle require Advanced URI, a configured vault identifier, and a YAML `id` on the note. The companion Eagle inspector supports common images, videos (including MP4), audio, PDF, web bookmarks (URL), design files, fonts, 3D assets, documents and archives. Its logo opens link copying; existing backlinks and the add button appear alongside it.
 
 
 ## Issues and Suggestions

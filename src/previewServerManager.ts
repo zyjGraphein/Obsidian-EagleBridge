@@ -1,11 +1,8 @@
 import * as http from 'http';
-import * as fs from 'fs';
-import { createHash } from 'crypto';
+import { randomBytes } from 'crypto';
+import { IDENTITY_PATH, PROTOCOL, getLibraryKey, probeServer, registerServer, registryRoot } from '../eagle_to_ob/previewBridge';
 import type { Socket } from 'net';
 import type { ResolvedEagleLibraryProfile } from './libraryProfiles';
-
-const IDENTITY_PATH = '/__eaglebridge__/server-info';
-const PROTOCOL = 'EagleBridge-preview-v1';
 
 interface ServerEntry {
 	profile: ResolvedEagleLibraryProfile;
@@ -13,42 +10,7 @@ interface ServerEntry {
 	server: http.Server | null;
 	sockets: Set<Socket>;
 	conflict: string;
-}
-
-async function getLibraryKey(libraryPath: string): Promise<string> {
-	const [realPath, stats] = await Promise.all([
-		fs.promises.realpath(libraryPath),
-		fs.promises.stat(libraryPath, { bigint: true }),
-	]);
-	// File identity also recognizes macOS path aliases and Windows junctions.
-	const identity = stats.ino !== BigInt(0)
-		? `${stats.dev}:${stats.ino}`
-		: process.platform === 'win32' ? realPath.toLowerCase() : realPath;
-	return createHash('sha256').update(identity).digest('hex');
-}
-
-function probeServer(port: number): Promise<string | null> {
-	return new Promise((resolve) => {
-		const request = http.get({ hostname: 'localhost', port, path: IDENTITY_PATH, agent: false }, (response) => {
-			let body = '';
-			response.setEncoding('utf8');
-			response.on('data', (chunk: string) => {
-				body += chunk;
-				if (body.length > 4096) request.destroy();
-			});
-			response.on('error', () => resolve(null));
-			response.on('end', () => {
-				try {
-					const info = JSON.parse(body);
-					resolve(response.statusCode === 200 && info.protocol === PROTOCOL && typeof info.libraryKey === 'string'
-						? info.libraryKey : null);
-				} catch { resolve(null); }
-			});
-		});
-		const timeout = setTimeout(() => request.destroy(), 1500);
-		request.on('error', () => resolve(null));
-		request.on('close', () => { clearTimeout(timeout); resolve(null); });
-	});
+	unregister: (() => Promise<void>) | null;
 }
 
 /** Each vault owns its listeners; other vaults reuse them and take over after shutdown. */
@@ -63,6 +25,7 @@ export class PreviewServerManager {
 		private notify: (message: string) => void,
 		private reportError: (error: unknown) => void,
 		private retryMs = 2000,
+		private discoveryRoot = registryRoot,
 	) {}
 
 	refresh(profiles: ResolvedEagleLibraryProfile[]): Promise<void> {
@@ -87,7 +50,7 @@ export class PreviewServerManager {
 			for (const [port, { profile, libraryKey }] of desired) {
 				const existing = this.entries.get(port);
 				if (existing) existing.profile = profile;
-				else this.entries.set(port, { profile, libraryKey, server: null, sockets: new Set(), conflict: '' });
+				else this.entries.set(port, { profile, libraryKey, server: null, sockets: new Set(), conflict: '', unregister: null });
 			}
 			await this.maintain();
 		});
@@ -116,7 +79,7 @@ export class PreviewServerManager {
 			for (const entry of this.entries.values()) {
 				if (this.stopped) break;
 				if (entry.server) continue;
-				const remoteKey = await probeServer(entry.profile.servePort);
+				const remoteKey = (await probeServer(entry.profile.servePort))?.libraryKey;
 				if (remoteKey === entry.libraryKey) {
 					entry.conflict = '';
 					continue;
@@ -132,10 +95,11 @@ export class PreviewServerManager {
 	}
 
 	private async start(entry: ServerEntry): Promise<void> {
+		const instanceId = randomBytes(16).toString('hex');
 		const server = http.createServer((request, response) => {
 			if (request.url === IDENTITY_PATH) {
 				response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-				response.end(JSON.stringify({ protocol: PROTOCOL, libraryKey: entry.libraryKey }));
+				response.end(JSON.stringify({ protocol: PROTOCOL, libraryKey: entry.libraryKey, instanceId, alias: entry.profile.alias }));
 				return;
 			}
 			this.serve(entry.profile, request, response);
@@ -155,12 +119,18 @@ export class PreviewServerManager {
 				this.reportError(error);
 				void this.enqueue(() => this.close(entry));
 			});
+			try {
+				entry.unregister = await registerServer(entry.libraryKey, entry.profile.servePort, instanceId, this.discoveryRoot);
+			} catch (error) {
+				this.reportError(error);
+				this.notify(`Eagle link copying unavailable: cannot register the preview service for ${entry.profile.alias}.`);
+			}
 			if (this.stopped) await this.close(entry);
 		} catch (error) {
 			server.close();
 			if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
 				// Another vault may win the bind between probing and listening.
-				const remoteKey = await probeServer(entry.profile.servePort);
+				const remoteKey = (await probeServer(entry.profile.servePort))?.libraryKey;
 				if (remoteKey !== entry.libraryKey) this.warnConflict(entry, Boolean(remoteKey));
 			} else {
 				this.reportError(error);
@@ -179,6 +149,11 @@ export class PreviewServerManager {
 	private async close(entry: ServerEntry): Promise<void> {
 		const server = entry.server;
 		entry.server = null;
+		const unregister = entry.unregister;
+		entry.unregister = null;
+		if (unregister) {
+			try { await unregister(); } catch (error) { this.reportError(error); }
+		}
 		if (!server) return;
 		await new Promise<void>(resolve => {
 			server.close(() => resolve());

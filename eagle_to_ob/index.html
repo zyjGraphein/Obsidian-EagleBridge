@@ -35,7 +35,7 @@
             background: var(--panel-bg);
         }
 
-        button, input { font: inherit; }
+        button, input, select { font: inherit; }
         button { cursor: pointer; -webkit-app-region: no-drag; }
         button, input { -webkit-tap-highlight-color: transparent; }
 
@@ -89,6 +89,23 @@
         }
 
         .add-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+        .add-btn[aria-expanded="true"] { background: var(--surface-hover); border-color: var(--border); }
+
+        [hidden] { display: none !important; }
+        .copy-panel { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .copy-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .copy-heading h2 { margin: 0; font-size: 12px; font-weight: 600; }
+        .text-btn { padding: 2px 4px; border: 0; background: transparent; color: var(--accent); }
+        .text-btn:hover { text-decoration: underline; }
+        .copy-status { margin: 4px 0 8px; color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+        .copy-formats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        .copy-format { min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-bg); color: var(--text-primary); text-align: left; }
+        .copy-format:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+        .copy-format small { display: block; color: var(--text-secondary); font-size: 10px; margin-top: 2px; }
+        button:disabled { opacity: 0.45; cursor: default; }
+        .copy-width { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--text-secondary); font-size: 11px; }
+        .copy-width input { width: 68px; height: 26px; padding: 3px 6px; }
+        #copyService { margin-bottom: 8px; }
 
         .form-card {
             display: none;
@@ -169,10 +186,29 @@
 <body>
     <main class="plugin-shell">
         <div class="toolbar-row">
-            <button id="registerUrlBtn" class="add-btn" type="button" aria-label="Add link" title="Add link">
+            <button id="copyLinkBtn" class="add-btn" type="button" aria-label="Copy Eagle link" title="Copy Eagle link" aria-expanded="false" aria-controls="copyPanel">
                 <img class="brand-logo" src="logo.svg" alt="" aria-hidden="true" width="24" height="24" draggable="false">
             </button>
             <div id="urlButtonsContainer" class="buttons-row" role="group" aria-label="Linked destinations"></div>
+            <button id="registerUrlBtn" class="add-btn" type="button" aria-label="Add link" title="Add link">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+            </button>
+        </div>
+
+        <div id="copyPanel" class="copy-panel" role="group" aria-labelledby="copyTitle" hidden>
+            <div class="copy-heading">
+                <h2 id="copyTitle">Copy link</h2>
+                <button id="copyRetry" class="text-btn" type="button">Retry</button>
+            </div>
+            <p id="copyStatus" class="copy-status" role="status" aria-live="polite"></p>
+            <select id="copyService" class="form-input" aria-label="Preview address" hidden></select>
+            <div class="copy-formats">
+                <button class="copy-format" type="button" data-copy-format="embed" disabled>Embed<small>![name](url)</small></button>
+                <button class="copy-format" type="button" data-copy-format="link" disabled>Link<small>[name](url)</small></button>
+                <button class="copy-format" type="button" data-copy-format="url" disabled>URL<small>http://localhost:…</small></button>
+                <button class="copy-format" type="button" data-copy-format="id" disabled>Item ID<small>ID.info</small></button>
+            </div>
+            <label class="copy-width" for="copyWidth">Embed width <input id="copyWidth" class="form-input" type="number" min="1" max="99999" step="1" value="700" placeholder="Auto"> px</label>
         </div>
 
         <div id="urlInlineForm" class="form-card" role="group" aria-labelledby="inlineFormTitle">
@@ -223,6 +259,7 @@
     const inlineUrlAddressInput = document.getElementById('inlineUrlAddressInput');
     const inlineFormCancelBtn = document.getElementById('inlineFormCancelBtn');
     const inlineFormConfirmBtn = document.getElementById('inlineFormConfirmBtn');
+    const copyPanel = require(path.join(__dirname, 'copyPanel.js'))(document, eagle, () => currentItem, hideInlineForm);
 
     function normalizeEntry(entry) {
         if (!entry || typeof entry.url !== 'string') {
@@ -236,6 +273,7 @@
     }
 
     function showInlineForm(title, name = DEFAULT_LINK_NAME, url = '') {
+        copyPanel.close();
         inlineFormTitle.textContent = title;
         inlineUrlNameInput.value = name;
         inlineUrlAddressInput.value = url;
@@ -400,6 +438,8 @@
     };
 
     eagle.onPluginCreate(async () => {
+        copyPanel.close();
+        currentItem = null;
         applyTheme(await eagle.app.theme);
         const items = await eagle.item.getSelected();
         currentItem = items[0];

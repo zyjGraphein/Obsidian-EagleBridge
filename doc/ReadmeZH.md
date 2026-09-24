@@ -17,6 +17,7 @@ EagleBridge 将 Obsidian 笔记与 Canvas 白板连接到 Eagle 管理的素材�
 - 查看当前 Obsidian 库中的素材引用关系，修改素材属性，选择链接删除范围。
 - 批量迁移当前文档的本地附件（包括视频）；将 Markdown 与 Eagle 附件导出为文件夹或 ZIP。
 - 选择标签同步方向，配合 Eagle 端插件从素材回到笔记。
+- 在 Eagle 中复制嵌入、普通链接、纯 URL 或素材编号，自动匹配素材库的可用预览端口。
 - 支持 obEcraft 联动，改进 Mac 路径、iCloud 导入、视频编辑与设置界面。
 - 多个 Obsidian 库使用同一 Eagle 库及端口时共享预览服务，持有端口的窗口关闭后自动接管。
 
@@ -81,6 +82,21 @@ EagleBridge 将 Obsidian 笔记与 Canvas 白板连接到 Eagle 管理的素材�
 
 在实时预览中，将鼠标移到视频上，点击右上角的代码按钮即可编辑文字链接；将光标移到其他行后恢复预览。
 
+### 在 Eagle 中复制链接
+
+安装或更新完整的 `eagle_to_ob` 文件夹，并在 Obsidian 中重载 EagleBridge。在 Eagle 素材信息栏点击 **logo**，展开 **Copy link**：
+
+- **Embed**：`![文件名.jpg|700](地址)`，嵌入预览。宽度可修改，留空使用原尺寸。
+- **Link**：`[文件名.jpg](地址)`，不嵌入预览的普通链接。
+- **URL**：`http://localhost:端口/images/素材编号.info`，适合粘贴到侧边栏或其他插件的地址栏。
+- **Item ID**：`素材编号.info`，纯文本编号，不含 Markdown 或网址；预览服务未运行时也能复制。
+
+右侧 **+** 仍用于添加回跳链接。复制功能不限于图片，视频、PDF 等素材也可使用。
+
+复制网址或 Markdown 链接需要 Obsidian 已打开、EagleBridge 已启用，且已配置该素材所属的 Eagle 库。面板会匹配该库的实际预览端口，并在复制前再次确认服务可用，不会默认使用 6060。同一个库有多个可用地址时需手动选择；未找到服务时，启动或重载 Obsidian 插件后点击 **Retry**。验证失败不会覆盖剪贴板。旧版插件即使能正常预览，也不提供新版发现接口；需要更新并重载所有已打开的 Obsidian 库中的 EagleBridge，尤其是当前占用预览端口的窗口。
+
+服务发现仅在用户主目录的 `~/.eaglebridge/preview-servers` 中保存本地小记录，按素材库标识的哈希分组，记录端口和临时服务编号；不上传数据、不扫描网络端口。生成的 localhost 链接需要本机对应预览服务运行才能访问。
+
 ## 开发指南
 
 此插件遵循 [Obsidian Sample Plugin](https://github.com/obsidianmd/obsidian-sample-plugin) 的结构，更多详情请参阅。
@@ -99,7 +115,7 @@ EagleBridge 将 Obsidian 笔记与 Canvas 白板连接到 Eagle 管理的素材�
 
 ## 已知限制
 
-引用与删除检查只覆盖当前 Obsidian 库，不包含其他已打开的库或外部应用；共享预览服务不会合并引用索引。批量迁移限于当前 Markdown 正文，视频播放能力取决于 Obsidian 支持的格式。生成 Eagle 回跳链接需要 Advanced URI、已配置的库标识和笔记 YAML `id`；配套 Eagle 检查器支持常见图片、视频（含 MP4）、音频、PDF、网页书签（URL）、设计文件、字体、3D 素材、文档及压缩包等格式。点击 logo 添加链接，已有链接与 logo 同行显示。
+引用与删除检查只覆盖当前 Obsidian 库，不包含其他已打开的库或外部应用；共享预览服务不会合并引用索引。批量迁移限于当前 Markdown 正文，视频播放能力取决于 Obsidian 支持的格式。生成 Eagle 回跳链接需要 Advanced URI、已配置的库标识和笔记 YAML `id`；配套 Eagle 检查器支持常见图片、视频（含 MP4）、音频、PDF、网页书签（URL）、设计文件、字体、3D 素材、文档及压缩包等格式。点击 logo 打开复制面板，加号用于添加回跳链接，已有链接与 logo 同行显示。
 
 
 ## 问题或建议
