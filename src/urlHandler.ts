@@ -16,8 +16,13 @@ import {
 } from './libraryProfiles';
 import { getCurrentPageTags } from './synchronizedpagetabs';
 import { chooseUploadTargetProfile, type UploadTargetMenuAnchor } from './uploadTargetModal';
-import { uploadFileToLibrary, uploadUrlToLibrary } from './eagleApi';
+import { uploadFileToLibrary, uploadUrlToLibrary, waitForEagleItemReady } from './eagleApi';
 import { getEagleItemPathLocation } from './eaglePaths';
+import {
+	resolveInsertSeparator,
+	resolveInsertWidth,
+	sanitizeEmbedFileName,
+} from './embedFormat';
 
 const electron = require('electron');
 const IMAGE_EXTENSIONS = new Set([
@@ -544,13 +549,20 @@ function createUploadedLink(profile: ResolvedEagleLibraryProfile, itemId: string
 	};
 }
 
-export function createMarkdownLink(link: ResolvedEagleLink, imageSize: number | undefined): string {
+export function createMarkdownLink(
+	link: ResolvedEagleLink,
+	imageSize: number | undefined,
+	pluginInstance?: MyPlugin | null,
+): string {
+	const settings = pluginInstance?.settings;
+	const safeName = sanitizeEmbedFileName(link.fileName, settings, pluginInstance?.app);
 	if (!link.isImage) {
-		return `[${link.fileName}](${link.url})`;
+		return `[${safeName}](${link.url})`;
 	}
 
-	const sizeSuffix = imageSize ? `|${imageSize}` : '';
-	return `![${link.fileName}${sizeSuffix}](${link.url})`;
+	const width = resolveInsertWidth(link, settings, imageSize);
+	const sizeSuffix = width ? `|${width}` : '';
+	return `![${safeName}${sizeSuffix}](${link.url})`;
 }
 
 export async function getTransferFilePath(file: File): Promise<string> {
@@ -590,6 +602,10 @@ export async function resolveFilePathToEagleLink(
 	}
 	const tags = uploadTags ?? getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
 	const uploadedItem = await uploadFileToLibrary(filePath, targetProfile, tags);
+	// Eagle writes the image + metadata.json after addFromPaths returns. Without
+	// this wait the size lookup fell back to portrait and the preview server had
+	// nothing to serve yet.
+	await waitForEagleItemReady(targetProfile, uploadedItem.itemId);
 	return createUploadedLink(
 		targetProfile,
 		uploadedItem.itemId,
@@ -648,11 +664,26 @@ export async function resolveTransferFilesToEagleLinks(
 	const resolvedLinks: ResolvedEagleLink[] = [];
 	const errors: unknown[] = [];
 
-	for (const filePath of dedupedFilePaths) {
-		try {
-			resolvedLinks.push(await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget));
-		} catch (error) {
-			errors.push(error);
+	// Every upload already runs through Eagle's library queue, so submitting them
+	// all at once stays serialised on the Eagle side. What genuinely overlaps is
+	// "wait until Eagle has written this item to disk": looping that per file made
+	// the total wait the sum of each item's write time, with a worst case of
+	// N x the readiness timeout when Eagle was busy.
+	const attempts = await Promise.all(
+		dedupedFilePaths.map(async (filePath): Promise<{ link?: ResolvedEagleLink; error?: unknown }> => {
+			try {
+				return { link: await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget) };
+			} catch (error) {
+				return { error };
+			}
+		}),
+	);
+
+	for (const attempt of attempts) {
+		if (attempt.link) {
+			resolvedLinks.push(attempt.link);
+		} else {
+			errors.push(attempt.error);
 		}
 	}
 	if (errors.length > 0) {
@@ -724,11 +755,11 @@ export async function resolveMarkdownTransfer(
 			}
 
 			const resolvedLinks = await resolveTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown', selection);
-			return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize)) ?? null;
+			return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize, pluginInstance)) ?? null;
 		}
 
 		const resolvedLinks = await resolveTransferFilesToEagleLinks(transferFiles, pluginInstance, 'markdown');
-		return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize)) ?? null;
+		return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize, pluginInstance)) ?? null;
 	}
 
 	const clipboardText = dataTransfer.getData('text/plain')?.trim() || '';
@@ -754,11 +785,11 @@ export async function resolveMarkdownTransfer(
 			}
 
 			const resolvedLink = await resolveUrlToEagleLink(clipboardText, pluginInstance, selection);
-			return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize)];
+			return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize, pluginInstance)];
 		}
 
 		const resolvedLink = await resolveUrlToEagleLink(clipboardText, pluginInstance);
-		return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize)];
+		return [createMarkdownLink(resolvedLink, pluginInstance.settings.imageSize, pluginInstance)];
 	}
 
 	if (!shouldHandleFiles || clipboardFiles.length === 0) {
@@ -776,11 +807,11 @@ export async function resolveMarkdownTransfer(
 		}
 
 		const resolvedLinks = await resolveTransferFilesToEagleLinks(clipboardFiles, pluginInstance, 'markdown', selection);
-		return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize)) ?? null;
+		return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize, pluginInstance)) ?? null;
 	}
 
 	const resolvedLinks = await resolveTransferFilesToEagleLinks(clipboardFiles, pluginInstance, 'markdown');
-	return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize)) ?? null;
+	return resolvedLinks?.map((link) => createMarkdownLink(link, pluginInstance.settings.imageSize, pluginInstance)) ?? null;
 }
 
 export async function handlePasteEvent(
@@ -812,7 +843,7 @@ export async function handlePasteEvent(
 			return;
 		}
 
-		editor.replaceSelection(embeds.join('\n'));
+		editor.replaceSelection(embeds.join(resolveInsertSeparator(pluginInstance.settings)));
 		const insertedObsidianDefault = embeds.some((embed) => !embed.includes('http://localhost'));
 		if (insertedObsidianDefault) {
 			new Notice('Obsidian 默认嵌入已插入');
@@ -857,7 +888,7 @@ export async function handleDropEvent(
 			return;
 		}
 
-		editor.replaceSelection(embeds.join('\n'));
+		editor.replaceSelection(embeds.join(resolveInsertSeparator(pluginInstance.settings)));
 		if (embeds.some((embed) => !embed.includes('http://localhost'))) {
 			new Notice('Obsidian 默认嵌入已插入');
 			return;

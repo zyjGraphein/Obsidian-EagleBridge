@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { print } from './main';
 import type { ResolvedEagleLibraryProfile } from './libraryProfiles';
@@ -197,6 +198,56 @@ export async function uploadFileToLibrary(
 		}
 		return { itemId, fileName };
 	});
+}
+
+const EAGLE_ITEM_READY_TIMEOUT_MS = 10000;
+const EAGLE_ITEM_READY_POLL_INTERVAL_MS = 120;
+const EAGLE_IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp']);
+
+/**
+ * Waits until Eagle has actually written the item to disk.
+ *
+ * `/item/addFromPaths` returns as soon as the item is queued - the image file and
+ * its `metadata.json` land afterwards. Two symptoms came from inserting the embed
+ * straight away:
+ *   1. the size read failed, so every fresh upload fell back to the portrait width;
+ *   2. the embed pointed at `images/<id>.info` before it existed, the preview
+ *      server answered 404, and the image only showed up after reopening the note.
+ */
+export async function waitForEagleItemReady(
+	profile: ResolvedEagleLibraryProfile,
+	itemId: string,
+	timeoutMs = EAGLE_ITEM_READY_TIMEOUT_MS,
+): Promise<boolean> {
+	const libraryRoot = profile?.resolvedPath || '';
+	if (!libraryRoot || !itemId) {
+		return false;
+	}
+
+	const infoDir = path.join(libraryRoot, 'images', `${itemId}.info`);
+	const metadataPath = path.join(infoDir, 'metadata.json');
+	const deadline = Date.now() + timeoutMs;
+
+	while (Date.now() < deadline) {
+		try {
+			const metadata = JSON.parse(await fs.promises.readFile(metadataPath, 'utf8')) as {
+				width?: number;
+				height?: number;
+			};
+			if (Number(metadata?.width) > 0 && Number(metadata?.height) > 0) {
+				const entries = await fs.promises.readdir(infoDir);
+				if (entries.some((entry) => EAGLE_IMAGE_FILE_EXTENSIONS.has(path.extname(entry).toLowerCase()))) {
+					return true;
+				}
+			}
+		} catch {
+			// Eagle has not finished writing this item yet - poll again.
+		}
+		await delay(EAGLE_ITEM_READY_POLL_INTERVAL_MS);
+	}
+
+	print(`Eagle item ${itemId} was not ready within ${timeoutMs}ms; inserting the link anyway.`);
+	return false;
 }
 
 interface EagleBookmark {

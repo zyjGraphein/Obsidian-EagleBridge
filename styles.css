@@ -18,12 +18,6 @@
 .eagle-embed-block:focus-within .eagle-embed-edit { opacity: 1; }
 .eagle-embed-edit:hover { color: var(--text-normal); }
 
-/* Brand */
-.eagle-brand-logo { display: block; width: 32px; height: 32px; flex-shrink: 0; object-fit: contain; }
-.eagle-settings-header,
-.eagle-ref-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.eagle-settings-header .eagle-brand-logo { width: 40px; height: 40px; }
-
 /* Settings */
 .eagle-settings-root { container: eagle-settings / inline-size; }
 .eagle-settings-shell {
@@ -35,7 +29,6 @@
     padding-bottom: 24px;
 }
 .eagle-settings-title { margin: 0; font-size: var(--font-ui-large); }
-.eagle-settings-version { margin-left: auto; color: var(--text-muted); font-size: var(--font-ui-small); white-space: nowrap; }
 .eagle-settings-nav {
     display: flex;
     gap: 4px;
@@ -71,9 +64,14 @@
 }
 .eagle-settings-section-header { margin-bottom: 16px; }
 .eagle-settings-section-copy h3,
-.eagle-settings-card-header h4,
+.eagle-settings-card-header h4 { margin: 0; font-size: var(--font-ui-small); font-weight: 600; }
 .eagle-tag-sync-panel h3,
-.eagle-obsidian-link-panel h3 { margin: 0; font-size: var(--font-ui-small); font-weight: 600; }
+.eagle-obsidian-link-panel h3 {
+    margin: 0 0 10px;
+    padding: 0 16px;
+    font-size: var(--font-ui-small);
+    font-weight: 600;
+}
 .eagle-settings-section-copy p,
 .eagle-settings-card-header p,
 .eagle-settings-empty-state p {
@@ -82,14 +80,16 @@
     font-size: var(--font-ui-smaller);
     line-height: 1.5;
 }
-.eagle-settings-card-header { margin-bottom: 4px; }
+.eagle-settings-card-header { margin-bottom: 10px; padding: 0 16px; }
 .eagle-settings-card,
 .eagle-tag-sync-panel,
 .eagle-obsidian-link-panel { min-width: 0; }
 .eagle-settings-root .setting-item {
-    padding: 12px 0;
+    gap: 16px;
+    padding: 12px 16px;
     border-top: 1px solid var(--background-modifier-border);
 }
+.eagle-settings-root .setting-item-info { min-width: 0; }
 .eagle-settings-card > .setting-item:first-of-type { border-top: 0; }
 .eagle-settings-root .setting-item-description { font-size: var(--font-ui-smaller); }
 .eagle-settings-root .setting-item-description:empty { display: none; }
@@ -135,6 +135,8 @@
 .eagle-settings-empty-state h4 { margin: 0; color: var(--text-normal); }
 .eagle-settings-empty-state button { margin-top: 14px; }
 .eagle-tag-sync-subcard { padding-left: 16px; border-left: 2px solid var(--background-modifier-border); }
+/* 与 .eagle-tag-sync-subcard 同一套从属表达：缩进 + 左侧竖线 */
+.eagle-settings-subitem { padding-left: 16px; border-left: 2px solid var(--background-modifier-border); }
 @container eagle-settings (max-width: 460px) {
     .eagle-settings-root .setting-item:has(input[type='text'], select) { flex-direction: column; align-items: stretch; gap: 8px; }
     .eagle-settings-root .setting-item-control input[type='text'],

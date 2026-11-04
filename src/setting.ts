@@ -1,7 +1,18 @@
-import { App, PluginSettingTab, Setting, Notice, setIcon, setTooltip } from 'obsidian';
+import { App, PluginSettingTab, Notice, setIcon, setTooltip } from 'obsidian';
 import MyPlugin from './main';
 import { appendEagleBridgeLogo } from './branding';
 import { createEmptyLibraryProfile, getResolvedLibraryProfiles, MAX_LIBRARY_PROFILES } from './libraryProfiles';
+import { EBSetting, ebT, normalizeUiLang, type UiLang } from './i18n';
+import {
+	normalizeFileNameMode,
+	normalizeImageSizeMode,
+	normalizeMultiInsertSeparator,
+	normalizeSquareAlign,
+	type FileNameMode,
+	type ImageSizeMode,
+	type MultiInsertSeparator,
+	type SquareAlign,
+} from './embedFormat';
 
 export interface EagleUploadSettings {
 	enabled: boolean;
@@ -39,6 +50,17 @@ export interface MyPluginSettings {
 	autoSyncObsidianLinkToEagle: boolean;
 	obsidianStoreId: string;
 	imageSize: number | undefined;
+	imageSizeMode?: ImageSizeMode;
+	squareSize?: number;
+	landscapeRatio?: number;
+	portraitRatio?: number;
+	landscapeWidth?: number;
+	portraitWidth?: number;
+	squareAlign?: SquareAlign;
+	fileNameMode?: FileNameMode;
+	fileNameCustom?: string;
+	multiInsertSeparator?: MultiInsertSeparator;
+	uiLang?: UiLang;
 	upload: EagleUploadSettings;
 	libraryPaths: string[];
 	debug: boolean;
@@ -72,6 +94,17 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	autoSyncObsidianLinkToEagle: false,
 	obsidianStoreId: '',
 	imageSize: undefined,
+	imageSizeMode: 'fixed',
+	squareSize: 300,
+	landscapeRatio: 1.6,
+	portraitRatio: 1,
+	landscapeWidth: 640,
+	portraitWidth: 400,
+	squareAlign: 'portrait',
+	fileNameMode: 'strip',
+	fileNameCustom: '',
+	multiInsertSeparator: 'none',
+	uiLang: 'en',
 	upload: { ...DEFAULT_UPLOAD_SETTINGS },
 	libraryPaths: [],
 	debug: false,
@@ -234,7 +267,8 @@ export class SampleSettingTab extends PluginSettingTab {
 				'aria-selected': this.activePage === page ? 'true' : 'false',
 			},
 		});
-		buttonEl.setText(title);
+		const pageLabel = ebT(title, this.plugin.settings);
+		buttonEl.setText(normalizeUiLang(this.plugin.settings.uiLang) === 'zh' ? `${pageLabel}设置` : pageLabel);
 		buttonEl.addEventListener('click', () => {
 			if (this.activePage === page) {
 				return;
@@ -256,15 +290,15 @@ export class SampleSettingTab extends PluginSettingTab {
 		});
 		const headerEl = sectionEl.createDiv({ cls: 'eagle-settings-section-header' });
 		const copyEl = headerEl.createDiv({ cls: 'eagle-settings-section-copy' });
-		copyEl.createEl('h3', { text: title });
+		copyEl.createEl('h3', { text: ebT(title, this.plugin.settings) });
 		if (description) {
-			copyEl.createEl('p', { text: description });
+			copyEl.createEl('p', { text: ebT(description, this.plugin.settings) });
 		}
 
 		if (options.actionText && options.onAction) {
 			const actionButton = headerEl.createEl('button', {
 				cls: 'mod-cta eagle-settings-header-action',
-				text: options.actionText,
+				text: ebT(options.actionText, this.plugin.settings),
 				type: 'button',
 			});
 			actionButton.addEventListener('click', options.onAction);
@@ -280,10 +314,10 @@ export class SampleSettingTab extends PluginSettingTab {
 		if (title || description) {
 			const headerEl = cardEl.createDiv({ cls: 'eagle-settings-card-header' });
 			if (title) {
-				headerEl.createEl('h4', { text: title });
+				headerEl.createEl('h4', { text: ebT(title, this.plugin.settings) });
 			}
 			if (description) {
-				headerEl.createEl('p', { text: description });
+				headerEl.createEl('p', { text: ebT(description, this.plugin.settings) });
 			}
 		}
 		return cardEl;
@@ -318,13 +352,13 @@ export class SampleSettingTab extends PluginSettingTab {
 	}
 
 	private renderLibraryRoutingSettings(parentEl: HTMLElement, resolvedProfiles: ReturnType<typeof getResolvedLibraryProfiles>): void {
-		new Setting(parentEl)
+		new EBSetting(parentEl, this.plugin.settings)
 			.setName('Destination')
 			.setDesc('For files dragged or pasted from outside Eagle.')
 			.addDropdown((dropdown) => {
 				dropdown
-					.addOption('fixed', 'Fixed target')
-					.addOption('askEveryTime', 'Ask every time')
+					.addOption('fixed', ebT('Fixed target', this.plugin.settings))
+					.addOption('askEveryTime', ebT('Ask every time', this.plugin.settings))
 					.setValue(this.plugin.settings.externalUploadMode)
 					.onChange(async (value: ExternalUploadMode) => {
 						this.plugin.settings.externalUploadMode = value;
@@ -334,7 +368,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		if (this.plugin.settings.externalUploadMode === 'fixed') {
-			new Setting(parentEl)
+			new EBSetting(parentEl, this.plugin.settings)
 				.setName('Default library')
 				.addDropdown((dropdown) => {
 					for (const profile of resolvedProfiles) {
@@ -428,10 +462,10 @@ export class SampleSettingTab extends PluginSettingTab {
 		});
 
 		const basicCard = this.createCard(parentEl, 'Library details');
-		new Setting(basicCard)
+		new EBSetting(basicCard, this.plugin.settings)
 			.setName('Alias')
 			.addText((text) => {
-				text.setPlaceholder('Enter alias')
+				text.setPlaceholder(ebT('Enter alias', this.plugin.settings))
 					.setValue(profile.alias)
 					.onChange((value) => {
 						this.plugin.settings.libraryProfiles[profileIndex].alias = value;
@@ -439,11 +473,11 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(basicCard)
+		new EBSetting(basicCard, this.plugin.settings)
 			.setName('Port')
 			.setDesc('Keep this port stable to preserve existing links.')
 			.addText((text) => {
-				text.setPlaceholder('Enter port number')
+				text.setPlaceholder(ebT('Enter port number', this.plugin.settings))
 					.setValue(String(profile.servePort))
 					.onChange((value) => {
 						const parsedPort = Number.parseInt(value, 10);
@@ -454,11 +488,11 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(basicCard)
+		new EBSetting(basicCard, this.plugin.settings)
 			.setName('Upload folder ID')
 			.setDesc('Optional. Leave blank to use the library root.')
 			.addText((text) => {
-				text.setPlaceholder('Enter folder ID')
+				text.setPlaceholder(ebT('Enter folder ID', this.plugin.settings))
 					.setValue(profile.folderId || '')
 					.onChange((value) => {
 						this.plugin.settings.libraryProfiles[profileIndex].folderId = value.trim();
@@ -471,11 +505,11 @@ export class SampleSettingTab extends PluginSettingTab {
 			'Library paths',
 			'One path per device, all pointing to the same Eagle library.',
 		);
-		new Setting(pathsCard)
+		new EBSetting(pathsCard, this.plugin.settings)
 			.setName('Device paths')
 			.addButton((button) => {
 				button
-					.setButtonText('Add path')
+					.setButtonText(ebT('Add path', this.plugin.settings))
 					.setCta()
 					.onClick(async () => {
 						this.plugin.settings.libraryProfiles[profileIndex].paths.push('');
@@ -492,11 +526,11 @@ export class SampleSettingTab extends PluginSettingTab {
 		}
 
 		profile.paths.forEach((libraryPath, pathIndex) => {
-			new Setting(pathsCard)
+			new EBSetting(pathsCard, this.plugin.settings)
 				.setClass('eagle-settings-path')
 				.setName(`Path ${pathIndex + 1}`)
 				.addText((text) => {
-					text.setPlaceholder('Enter library path')
+					text.setPlaceholder(ebT('Enter library path', this.plugin.settings))
 						.setValue(libraryPath)
 						.onChange((value) => {
 							this.plugin.settings.libraryProfiles[profileIndex].paths[pathIndex] = value;
@@ -517,10 +551,27 @@ export class SampleSettingTab extends PluginSettingTab {
 	}
 
 	private renderLibrariesPage(parentEl: HTMLElement): void {
+		const langSection = this.createSection(parentEl, 'Interface language', '');
+		const langCard = this.createCard(langSection, '');
+		new EBSetting(langCard, this.plugin.settings)
+			.setName('Interface language')
+			.setDesc('Switch the language of these settings. Applies to this settings panel.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('zh', '中文')
+					.addOption('en', 'English')
+					.setValue(normalizeUiLang(this.plugin.settings.uiLang))
+					.onChange(async (value: string) => {
+						this.plugin.settings.uiLang = normalizeUiLang(value);
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
 		const resolvedProfiles = getResolvedLibraryProfiles(this.plugin.settings);
 		const profileSection = this.createSection(
 			parentEl,
-			'Libraries',
+			'Library list',
 			'',
 			{
 				actionText: this.plugin.settings.libraryProfiles.length >= MAX_LIBRARY_PROFILES ? `Max ${MAX_LIBRARY_PROFILES}` : 'Add library',
@@ -535,11 +586,11 @@ export class SampleSettingTab extends PluginSettingTab {
 	private renderUploadPage(parentEl: HTMLElement): void {
 		const sectionEl = this.createSection(
 			parentEl,
-			'Upload',
+			'Image upload',
 			'',
 		);
 		const masterCard = this.createCard(sectionEl, '');
-		new Setting(masterCard)
+		new EBSetting(masterCard, this.plugin.settings)
 			.setName('Upload to Eagle')
 			.setDesc('Upload external files when dragging or pasting.')
 			.addToggle((toggle) => {
@@ -554,9 +605,46 @@ export class SampleSettingTab extends PluginSettingTab {
 		const routingCard = this.createCard(sectionEl, 'Upload destination');
 		this.renderLibraryRoutingSettings(routingCard, getResolvedLibraryProfiles(this.plugin.settings));
 
+		const nameCard = this.createCard(
+			sectionEl,
+			'Image file name',
+			'Avoid symbols such as [ ] in source file names clashing with Obsidian syntax. File names are cleaned by default; you can define your own rule.',
+		);
+		new EBSetting(nameCard, this.plugin.settings)
+			.setName('Naming mode')
+			.setDesc('Strip: remove [ ] ( ) | < >\nReplace: swap them to full-width\nNumbered: note title + index\nCustom: your own rules')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('strip', ebT('Strip dangerous characters (default)', this.plugin.settings))
+					.addOption('replace', ebT('Replace with full-width 【】（etc.)', this.plugin.settings))
+					.addOption('numbered', ebT('Note title - index', this.plugin.settings))
+					.addOption('custom', ebT('Custom rules', this.plugin.settings))
+					.setValue(normalizeFileNameMode(this.plugin.settings.fileNameMode))
+					.onChange(async (value: string) => {
+						this.plugin.settings.fileNameMode = normalizeFileNameMode(value);
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+		if (normalizeFileNameMode(this.plugin.settings.fileNameMode) === 'custom') {
+			// 与「覆盖 Eagle 标签」一致：用缩进 + 左侧竖线表示这是上一项的从属设置
+			const customWrapEl = nameCard.createDiv({ cls: 'eagle-settings-subitem' });
+			new EBSetting(customWrapEl, this.plugin.settings)
+				.setName('Custom rules')
+				.setDesc('Format: from=>to, comma-separated.')
+				.addText((text) => {
+					text.setPlaceholder('[=>【,]=>】')
+						.setValue(this.plugin.settings.fileNameCustom ?? '')
+						.onChange(async (value) => {
+							this.plugin.settings.fileNameCustom = value;
+							await this.plugin.saveSettings();
+						});
+				});
+		}
+
 		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
 		const surfaceCard = this.createCard(gridEl, 'Upload from');
-		new Setting(surfaceCard)
+		new EBSetting(surfaceCard, this.plugin.settings)
 			.setName('Markdown')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.markdown)
@@ -565,7 +653,7 @@ export class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(surfaceCard)
+		new EBSetting(surfaceCard, this.plugin.settings)
 			.setName('Canvas')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.canvas)
@@ -576,7 +664,7 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		const contentCard = this.createCard(gridEl, 'File types');
-		new Setting(contentCard)
+		new EBSetting(contentCard, this.plugin.settings)
 			.setName('Images')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.image)
@@ -585,7 +673,7 @@ export class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(contentCard)
+		new EBSetting(contentCard, this.plugin.settings)
 			.setName('Videos')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.video)
@@ -594,7 +682,7 @@ export class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(contentCard)
+		new EBSetting(contentCard, this.plugin.settings)
 			.setName('Web links')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.upload.website)
@@ -603,7 +691,7 @@ export class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(contentCard)
+		new EBSetting(contentCard, this.plugin.settings)
 			.setName('Other files')
 			.setDesc('PDF, audio and other attachments.')
 			.addToggle((toggle) => {
@@ -623,19 +711,134 @@ export class SampleSettingTab extends PluginSettingTab {
 		);
 		const gridEl = sectionEl.createDiv({ cls: 'eagle-settings-grid' });
 
-		const imageCard = this.createCard(gridEl, 'Images');
-		new Setting(imageCard)
-			.setName('Image size')
-			.setDesc('Width in pixels. Leave blank for original size.')
-			.addText((text) => {
-				text.setPlaceholder('Enter image size')
-					.setValue(this.plugin.settings.imageSize?.toString() || '')
-					.onChange(async (value) => {
-						this.plugin.settings.imageSize = value ? parseInt(value, 10) : undefined;
+		const insertCard = this.createCard(
+			gridEl,
+			'Image insertion',
+			'Only the initial width written into the note when you drag or paste an image. Change it later by editing the number after | in the note.',
+		);
+		new EBSetting(insertCard, this.plugin.settings)
+			.setName('Size mode')
+			.setDesc('Size mode: Square as base uses one square width, landscape and portrait scale from it.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('fixed', ebT('Fixed size', this.plugin.settings))
+					.addOption('ratio', ebT('Square as base × ratios', this.plugin.settings))
+					.addOption('explicit', ebT('Explicit landscape / portrait width', this.plugin.settings))
+					.setValue(normalizeImageSizeMode(this.plugin.settings.imageSizeMode))
+					.onChange(async (value: string) => {
+						this.plugin.settings.imageSizeMode = normalizeImageSizeMode(value);
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		const sizeMode = normalizeImageSizeMode(this.plugin.settings.imageSizeMode);
+		if (sizeMode === 'fixed') {
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Fixed width')
+				.setDesc('Every image uses this width. Leave blank to keep the original size.')
+				.addText((text) => {
+					text.setPlaceholder('300')
+						.setValue(this.plugin.settings.imageSize != null ? String(this.plugin.settings.imageSize) : '')
+						.onChange(async (value) => {
+							this.plugin.settings.imageSize = value ? parseInt(value, 10) : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+		} else if (sizeMode === 'explicit') {
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Landscape width')
+				.setDesc('Width in pixels for landscape images.')
+				.addText((text) => {
+					text.setPlaceholder('640')
+						.setValue(this.plugin.settings.landscapeWidth != null ? String(this.plugin.settings.landscapeWidth) : '')
+						.onChange(async (value) => {
+							const parsed = parseInt(value, 10);
+							this.plugin.settings.landscapeWidth = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Portrait width')
+				.setDesc('Width in pixels for portrait images.')
+				.addText((text) => {
+					text.setPlaceholder('400')
+						.setValue(this.plugin.settings.portraitWidth != null ? String(this.plugin.settings.portraitWidth) : '')
+						.onChange(async (value) => {
+							const parsed = parseInt(value, 10);
+							this.plugin.settings.portraitWidth = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Square aligns to')
+				.setDesc('Near-square images follow one of the two widths above.')
+				.addDropdown((dropdown) => {
+					dropdown
+						.addOption('portrait', ebT('Portrait', this.plugin.settings))
+						.addOption('landscape', ebT('Landscape', this.plugin.settings))
+						.setValue(normalizeSquareAlign(this.plugin.settings.squareAlign))
+						.onChange(async (value: string) => {
+							this.plugin.settings.squareAlign = normalizeSquareAlign(value);
+							await this.plugin.saveSettings();
+						});
+				});
+		} else {
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Square base width')
+				.setDesc('Width for near-square images. Leave blank to keep the original size.')
+				.addText((text) => {
+					text.setPlaceholder('300')
+						.setValue(this.plugin.settings.squareSize != null ? String(this.plugin.settings.squareSize) : '')
+						.onChange(async (value) => {
+							const parsed = parseInt(value, 10);
+							this.plugin.settings.squareSize = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Landscape ratio')
+				.setDesc('Landscape width = square base × this value.')
+				.addText((text) => {
+					text.setPlaceholder('1.6')
+						.setValue(this.plugin.settings.landscapeRatio != null ? String(this.plugin.settings.landscapeRatio) : '')
+						.onChange(async (value) => {
+							const parsed = parseFloat(value);
+							this.plugin.settings.landscapeRatio = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+			new EBSetting(insertCard, this.plugin.settings)
+				.setName('Portrait ratio')
+				.setDesc('Portrait width = square base × this value. Default 1.')
+				.addText((text) => {
+					text.setPlaceholder('1')
+						.setValue(this.plugin.settings.portraitRatio != null ? String(this.plugin.settings.portraitRatio) : '')
+						.onChange(async (value) => {
+							const parsed = parseFloat(value);
+							this.plugin.settings.portraitRatio = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+							await this.plugin.saveSettings();
+						});
+				});
+		}
+
+		new EBSetting(insertCard, this.plugin.settings)
+			.setName('Multi-image separator')
+			.setDesc('How to join the images when several are dragged or pasted at once.\nSide by side: written on the same line, so they flow into one row.\nSame line with a space: one extra gap between them.\nOne per line: each image own its own line.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('none', ebT('Side by side (same line)', this.plugin.settings))
+					.addOption('space', ebT('Same line with a space', this.plugin.settings))
+					.addOption('newline', ebT('One per line', this.plugin.settings))
+					.setValue(normalizeMultiInsertSeparator(this.plugin.settings.multiInsertSeparator))
+					.onChange(async (value: string) => {
+						this.plugin.settings.multiInsertSeparator = normalizeMultiInsertSeparator(value);
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(imageCard)
+
+		const imageCard = this.createCard(gridEl, 'Images');
+		new EBSetting(imageCard, this.plugin.settings)
 			.setName('Click to view images')
 			.setDesc('Click the right half of the image to view the image in detail.')
 			.addToggle((toggle) => {
@@ -645,7 +848,7 @@ export class SampleSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-		new Setting(imageCard)
+		new EBSetting(imageCard, this.plugin.settings)
 			.setName('Adaptive display ratio')
 			.setDesc('Maximum preview size relative to the window.')
 			.addSlider((slider) => {
@@ -659,13 +862,13 @@ export class SampleSettingTab extends PluginSettingTab {
 			});
 
 		const openCard = this.createCard(gridEl, 'Open attachments');
-		new Setting(openCard)
+		new EBSetting(openCard, this.plugin.settings)
 			.setName('Open in Obsidian')
 			.setDesc('The Web Viewer core plugin must be enabled to use popup or pane modes.')
 			.addDropdown((dropdown) => {
-				dropdown.addOption('newPage', 'Open in new page')
-					.addOption('popup', 'Open in popup')
-					.addOption('rightPane', 'Open in right pane')
+				dropdown.addOption('newPage', ebT('Open in new page', this.plugin.settings))
+					.addOption('popup', ebT('Open in popup', this.plugin.settings))
+					.addOption('rightPane', ebT('Open in right pane', this.plugin.settings))
 					.setValue(this.plugin.settings.openInObsidian || 'newPage')
 					.onChange(async (value) => {
 						this.plugin.settings.openInObsidian = value;
@@ -682,15 +885,15 @@ export class SampleSettingTab extends PluginSettingTab {
 		);
 
 		const attachmentTagSyncPanel = syncSection.createDiv({ cls: 'eagle-tag-sync-panel' });
-		attachmentTagSyncPanel.createEl('h3', { text: 'Attachment tag sync' });
+		attachmentTagSyncPanel.createEl('h3', { text: ebT('Attachment tag sync', this.plugin.settings) });
 
-		new Setting(attachmentTagSyncPanel)
+		new EBSetting(attachmentTagSyncPanel, this.plugin.settings)
 			.setName('Sync direction')
 			.addDropdown((dropdown) => {
 				dropdown
-					.addOption('off', 'Off')
-					.addOption('appendPageTagsToEagle', 'Append page tags to Eagle')
-					.addOption('importEagleTagsToYaml', 'Import Eagle tags to YAML')
+					.addOption('off', ebT('Off', this.plugin.settings))
+					.addOption('appendPageTagsToEagle', ebT('Append page tags to Eagle', this.plugin.settings))
+					.addOption('importEagleTagsToYaml', ebT('Import Eagle tags to YAML', this.plugin.settings))
 					.setValue(this.plugin.settings.attachmentTagSyncMode)
 					.onChange(async (value: AttachmentTagSyncMode) => {
 						this.plugin.settings.attachmentTagSyncMode = value;
@@ -702,7 +905,7 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		if (this.plugin.settings.attachmentTagSyncMode === 'appendPageTagsToEagle') {
 			const appendModeCard = attachmentTagSyncPanel.createDiv({ cls: 'eagle-tag-sync-subcard' });
-			new Setting(appendModeCard)
+			new EBSetting(appendModeCard, this.plugin.settings)
 				.setName('Replace Eagle tags')
 				.setDesc('Overwrite existing Eagle tags with the page tags.')
 				.addToggle((toggle) => {
@@ -717,9 +920,9 @@ export class SampleSettingTab extends PluginSettingTab {
 		}
 
 		const obsidianLinkSyncPanel = syncSection.createDiv({ cls: 'eagle-obsidian-link-panel' });
-		obsidianLinkSyncPanel.createEl('h3', { text: 'Obsidian link sync' });
+		obsidianLinkSyncPanel.createEl('h3', { text: ebT('Obsidian link sync', this.plugin.settings) });
 
-		new Setting(obsidianLinkSyncPanel)
+		new EBSetting(obsidianLinkSyncPanel, this.plugin.settings)
 			.setName('Auto send page link to Eagle')
 			.setDesc('Send a backlink for new attachments. Requires a YAML id on the page.')
 			.addToggle((toggle) => {
@@ -731,11 +934,11 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(obsidianLinkSyncPanel)
+		new EBSetting(obsidianLinkSyncPanel, this.plugin.settings)
 			.setName('Obsidian store ID')
 			.setDesc('Vault identifier used in obsidian://adv-uri links.')
 			.addText((text) => {
-				text.setPlaceholder('Enter Obsidian store ID')
+				text.setPlaceholder(ebT('Enter Obsidian store ID', this.plugin.settings))
 					.setValue(this.plugin.settings.obsidianStoreId)
 					.onChange(async (value) => {
 						this.plugin.settings.obsidianStoreId = value;
@@ -759,11 +962,11 @@ export class SampleSettingTab extends PluginSettingTab {
 			text: `Libraries available on this device: ${activeServerCount}`,
 		});
 
-		new Setting(cardEl)
+		new EBSetting(cardEl, this.plugin.settings)
 			.setName('Refresh servers')
 			.addButton((button) => {
 				button
-					.setButtonText('Refresh now')
+					.setButtonText(ebT('Refresh now', this.plugin.settings))
 					.setCta()
 					.onClick(async () => {
 						await this.plugin.refreshLibraryProfilesAndServers();
@@ -771,7 +974,7 @@ export class SampleSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(cardEl)
+		new EBSetting(cardEl, this.plugin.settings)
 			.setName('Debug mode')
 			.setDesc('Write diagnostic messages to the developer console.')
 			.addToggle((toggle) => {
