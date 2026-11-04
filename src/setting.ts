@@ -6,9 +6,11 @@ import { EBSetting, ebT, normalizeUiLang, type UiLang } from './i18n';
 import {
 	normalizeFileNameMode,
 	normalizeImageSizeMode,
+	normalizeMultiInsertSeparator,
 	normalizeSquareAlign,
 	type FileNameMode,
 	type ImageSizeMode,
+	type MultiInsertSeparator,
 	type SquareAlign,
 } from './embedFormat';
 
@@ -57,6 +59,7 @@ export interface MyPluginSettings {
 	squareAlign?: SquareAlign;
 	fileNameMode?: FileNameMode;
 	fileNameCustom?: string;
+	multiInsertSeparator?: MultiInsertSeparator;
 	uiLang?: UiLang;
 	upload: EagleUploadSettings;
 	libraryPaths: string[];
@@ -100,6 +103,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	squareAlign: 'portrait',
 	fileNameMode: 'strip',
 	fileNameCustom: '',
+	multiInsertSeparator: 'none',
 	uiLang: 'en',
 	upload: { ...DEFAULT_UPLOAD_SETTINGS },
 	libraryPaths: [],
@@ -817,6 +821,21 @@ export class SampleSettingTab extends PluginSettingTab {
 						});
 				});
 		}
+
+		new EBSetting(insertCard, this.plugin.settings)
+			.setName('Multi-image separator')
+			.setDesc('How to join the images when several are dragged or pasted at once.\nSide by side: written on the same line, so they flow into one row.\nSame line with a space: one extra gap between them.\nOne per line: each image own its own line.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('none', ebT('Side by side (same line)', this.plugin.settings))
+					.addOption('space', ebT('Same line with a space', this.plugin.settings))
+					.addOption('newline', ebT('One per line', this.plugin.settings))
+					.setValue(normalizeMultiInsertSeparator(this.plugin.settings.multiInsertSeparator))
+					.onChange(async (value: string) => {
+						this.plugin.settings.multiInsertSeparator = normalizeMultiInsertSeparator(value);
+						await this.plugin.saveSettings();
+					});
+			});
 
 		const imageCard = this.createCard(gridEl, 'Images');
 		new EBSetting(imageCard, this.plugin.settings)

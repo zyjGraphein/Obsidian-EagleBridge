@@ -16,9 +16,10 @@ import {
 } from './libraryProfiles';
 import { getCurrentPageTags } from './synchronizedpagetabs';
 import { chooseUploadTargetProfile, type UploadTargetMenuAnchor } from './uploadTargetModal';
-import { uploadFileToLibrary, uploadUrlToLibrary } from './eagleApi';
+import { uploadFileToLibrary, uploadUrlToLibrary, waitForEagleItemReady } from './eagleApi';
 import { getEagleItemPathLocation } from './eaglePaths';
 import {
+	resolveInsertSeparator,
 	resolveInsertWidth,
 	sanitizeEmbedFileName,
 } from './embedFormat';
@@ -601,6 +602,10 @@ export async function resolveFilePathToEagleLink(
 	}
 	const tags = uploadTags ?? getCurrentPageTags(pluginInstance.app, pluginInstance.settings);
 	const uploadedItem = await uploadFileToLibrary(filePath, targetProfile, tags);
+	// Eagle writes the image + metadata.json after addFromPaths returns. Without
+	// this wait the size lookup fell back to portrait and the preview server had
+	// nothing to serve yet.
+	await waitForEagleItemReady(targetProfile, uploadedItem.itemId);
 	return createUploadedLink(
 		targetProfile,
 		uploadedItem.itemId,
@@ -659,11 +664,26 @@ export async function resolveTransferFilesToEagleLinks(
 	const resolvedLinks: ResolvedEagleLink[] = [];
 	const errors: unknown[] = [];
 
-	for (const filePath of dedupedFilePaths) {
-		try {
-			resolvedLinks.push(await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget));
-		} catch (error) {
-			errors.push(error);
+	// Every upload already runs through Eagle's library queue, so submitting them
+	// all at once stays serialised on the Eagle side. What genuinely overlaps is
+	// "wait until Eagle has written this item to disk": looping that per file made
+	// the total wait the sum of each item's write time, with a worst case of
+	// N x the readiness timeout when Eagle was busy.
+	const attempts = await Promise.all(
+		dedupedFilePaths.map(async (filePath): Promise<{ link?: ResolvedEagleLink; error?: unknown }> => {
+			try {
+				return { link: await resolveFilePathToEagleLink(filePath, pluginInstance, resolvedUploadTarget) };
+			} catch (error) {
+				return { error };
+			}
+		}),
+	);
+
+	for (const attempt of attempts) {
+		if (attempt.link) {
+			resolvedLinks.push(attempt.link);
+		} else {
+			errors.push(attempt.error);
 		}
 	}
 	if (errors.length > 0) {
@@ -823,7 +843,7 @@ export async function handlePasteEvent(
 			return;
 		}
 
-		editor.replaceSelection(embeds.join('\n'));
+		editor.replaceSelection(embeds.join(resolveInsertSeparator(pluginInstance.settings)));
 		const insertedObsidianDefault = embeds.some((embed) => !embed.includes('http://localhost'));
 		if (insertedObsidianDefault) {
 			new Notice('Obsidian 默认嵌入已插入');
@@ -868,7 +888,7 @@ export async function handleDropEvent(
 			return;
 		}
 
-		editor.replaceSelection(embeds.join('\n'));
+		editor.replaceSelection(embeds.join(resolveInsertSeparator(pluginInstance.settings)));
 		if (embeds.some((embed) => !embed.includes('http://localhost'))) {
 			new Notice('Obsidian 默认嵌入已插入');
 			return;

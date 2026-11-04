@@ -57,6 +57,7 @@ export const EB_ZH: Record<string, string> = {
 	'Landscape ratio': '横图倍率',
 	'Landscape width': '横图宽度',
 	'Markdown': 'Markdown',
+	'Multi-image separator': '多图插入方式',
 	'Naming mode': '命名方式',
 	'Obsidian store ID': 'Obsidian 库标识',
 	'Open in Obsidian': '在 Obsidian 中打开',
@@ -110,6 +111,7 @@ export const EB_ZH: Record<string, string> = {
 	'Only the initial width written into the note when you drag or paste an image. Change it later by editing the number after | in the note.': '只决定拖入 / 粘贴图片时写进笔记的初始宽度。之后随时可以改：把图片语法里 | 后面的数字改掉即可。',
 	'Size mode: Square as base uses one square width, landscape and portrait scale from it.': '以方图为基准：定一个方图宽度，横图和竖图按倍率换算。',
 	'Strip: remove [ ] ( ) | < >\nReplace: swap them to full-width\nNumbered: note title + index\nCustom: your own rules': '去除：删掉 [ ] ( ) | < > 等符号\n替代：换成全角括号\n编号：笔记标题 + 序号\n自定义：自己写规则',
+	'How to join the images when several are dragged or pasted at once.\nSide by side: written on the same line, so they flow into one row.\nSame line with a space: one extra gap between them.\nOne per line: each image own its own line.': '一次拖入或粘贴多张图时，图与图之间怎么接。\n紧贴成排：写在同一行，空间够就自动并排。\n同行留空：同一行，但图之间隔一个空格。\n一行一张：每张图各占一行。',
 
 	// --- dropdown options ---
 	'Append page tags to Eagle': '把页面标签追加到 Eagle',
@@ -128,6 +130,9 @@ export const EB_ZH: Record<string, string> = {
 	'Portrait': '竖图',
 	'Replace with full-width 【】（etc.)': '替换为全角【】（等）',
 	'Square as base × ratios': '以方图为基准算倍率',
+	'One per line': '一行一张',
+	'Side by side (same line)': '紧贴成排（同一行）',
+	'Same line with a space': '同行，中间留空',
 	'Strip dangerous characters (default)': '去除危险字符（默认）',
 	'ZIP': 'ZIP',
 

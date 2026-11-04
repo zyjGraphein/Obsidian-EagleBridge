@@ -8,6 +8,7 @@ import type { ResolvedEagleLink } from './urlHandler';
 export type FileNameMode = 'strip' | 'replace' | 'numbered' | 'custom';
 export type ImageSizeMode = 'fixed' | 'ratio' | 'explicit';
 export type SquareAlign = 'portrait' | 'landscape';
+export type MultiInsertSeparator = 'newline' | 'space' | 'none';
 
 const LANDSCAPE_THRESHOLD = 1.2;
 const PORTRAIT_THRESHOLD = 0.83;
@@ -44,6 +45,29 @@ export function normalizeImageSizeMode(value: unknown): ImageSizeMode {
 
 export function normalizeSquareAlign(value: unknown): SquareAlign {
 	return value === 'landscape' ? 'landscape' : 'portrait';
+}
+
+export function normalizeMultiInsertSeparator(value: unknown): MultiInsertSeparator {
+	return value === 'newline' || value === 'space' ? value : 'none';
+}
+
+/**
+ * Separator written between embeds when several Eagle items are dropped / pasted
+ * in one go.
+ *
+ * `none` keeps every embed on the same source line, which is the only way to get
+ * them to sit side by side in Live Preview - CodeMirror renders one source line
+ * per block, so a `\n` always breaks the row no matter how much width is left.
+ */
+export function resolveInsertSeparator(settings?: MyPluginSettings | null): string {
+	const mode = normalizeMultiInsertSeparator(settings?.multiInsertSeparator);
+	if (mode === 'newline') {
+		return '\n';
+	}
+	if (mode === 'space') {
+		return ' ';
+	}
+	return '';
 }
 
 /**
